@@ -1,0 +1,36 @@
+## Lazyscope (stand-alone version)
+
+A TWITTER CLIENT THAT AUTOMATICALLY FETCHES CONTENT FOR YOU.
+[webpage](http://lazyscope.com/)
+
+## Issues
+
+You need to have your API keys.
+
+**Twitter xauth api key**
+
+`oauth.consumerKey & oauth.consumerKey in Lazyscope_sa/src/com/lazyscope/twitter/Twitter.as`
+
+**Flickr api key**
+
+`apiKey in Lazyscope_sa/src/com/lazyscope/content/Flickr.as`
+	
+**Twitpic api key**
+
+`d.key in Lazyscope_sa/src/com/lazyscope/content/Twitpic.as`
+
+## Authors
+
+**Jason Lee**
+
++ http://twitter.com/lazierjason
++ http://github.com/lazierjason
+
+**Ethan Gahng**
+
++ http://twitter.com/ethpresso
+
+**Andy Ghim**
+
++ http://twitter.com/capri
+
