@@ -1,0 +1,23 @@
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/svn/p4/!svn/ver/9239/trunk/air/Scouter/src/com/lazyfeed/account
+END
+AccountTwitter.as
+K 25
+svn:wc:ra_dav:version-url
+V 82
+/svn/p4/!svn/ver/9239/trunk/air/Scouter/src/com/lazyfeed/account/AccountTwitter.as
+END
+AccountTwitterEvent.as
+K 25
+svn:wc:ra_dav:version-url
+V 87
+/svn/p4/!svn/ver/9170/trunk/air/Scouter/src/com/lazyfeed/account/AccountTwitterEvent.as
+END
+IAccount.as
+K 25
+svn:wc:ra_dav:version-url
+V 76
+/svn/p4/!svn/ver/9186/trunk/air/Scouter/src/com/lazyfeed/account/IAccount.as
+END

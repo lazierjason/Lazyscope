@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+				   xmlns:s="library://ns.adobe.com/flex/spark" 
+				   xmlns:mx="library://ns.adobe.com/flex/mx"
+				   width="100%" top="0" bottom="0" left="0" right="0">
+	
+	<fx:Declarations>
+		<s:Power id="ease" exponent="3" />
+		<s:Resize id="show" duration="500" easer="{ease}" target="{this}" effectStart="onBeforeShow();visible=true;" effectEnd="onAfterShow()" />
+		<s:Resize id="hide" duration="500" easer="{ease}" target="{this}" heightTo="0" effectEnd="onHide();visible=false;" />
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyfeed.Base;
+			import com.lazyfeed.control.ToggleBtn;
+			public function onBeforeShow():void {}
+			public function onAfterShow():void {}
+			public function onHide():void {}
+			
+			public var toHeight:Number;
+			
+			public var btn:ToggleBtn = null;
+			
+			public function toggleForm():void
+			{
+				if (visible)
+					hideForm();
+				else
+					showForm();
+			}
+			
+			override public function set visible(value:Boolean):void
+			{
+				super.visible = value;
+				if (!value)
+					height = 0;
+			}
+			
+			override public function set enabled(value:Boolean):void
+			{
+				if (!value && visible)
+					hideForm();
+				
+				super.enabled = value;
+			}
+
+			public function showForm():void
+			{
+				hide.stop();
+				if (!enabled || visible) return;
+				
+				if (btn != null)
+					btn.selected = true;
+			
+				if (toHeight) {
+					show.heightFrom = height;
+					show.heightTo = toHeight + 14;
+					
+					if (hide.isPlaying)
+						hide.stop();
+					if (show.isPlaying)
+						show.stop();
+
+					show.play();
+				}
+			}
+			
+			public function hideForm():void
+			{
+				if (!visible) return;
+				
+				if (btn != null)
+					btn.selected = false;
+
+				if (hide.isPlaying)
+					hide.stop();
+				if (show.isPlaying)
+					show.stop();
+
+				hide.heightFrom = height;
+				hide.heightTo = 0;
+				
+				hide.play();
+			}
+		]]>
+	</fx:Script>
+	
+</s:Group>

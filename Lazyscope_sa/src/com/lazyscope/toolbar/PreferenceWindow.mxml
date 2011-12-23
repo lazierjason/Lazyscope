@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   width="350" close="onClose()" cornerRadius="7" backgroundColor="0xF3F1E9"
+			   title="Preferences">
+	
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			import com.lazyscope.ConfigDB;
+			import com.lazyscope.notifier.NotifyWindow;
+			import com.lazyscope.stream.StreamContainer;
+			
+			import mx.collections.ArrayCollection;
+			import mx.managers.PopUpManager;
+			
+			import spark.events.IndexChangeEvent;
+			public static var preferenceInstance:PreferenceWindow;
+			public static var isShowing:Boolean = false;
+			
+			public static function show():void
+			{
+				if (!preferenceInstance) {
+					preferenceInstance = new PreferenceWindow;
+				}
+				
+				PopUpManager.addPopUp(preferenceInstance, Base.app, true);
+				PopUpManager.centerPopUp(preferenceInstance);
+				isShowing = true;
+				
+				preferenceInstance.init();
+			}
+			
+			public static function hide():void
+			{
+				if (preferenceInstance)
+					preferenceInstance.onClose();
+			}
+			
+			public function init():void
+			{
+				prefNotify.parent.visible = Capabilities.os.substr(0, 5).toLowerCase() != 'linux';
+				prefAutoStart.selected = NativeApplication.nativeApplication.startAtLogin;
+				prefFontSize.selected = ConfigDB.get('stream_font_big') == 't';
+				prefStackUpdate.selected = ConfigDB.get('lf_update_stack') == 't';
+				prefStackUpdate2.selected = !prefStackUpdate.selected;
+				prefNotify.selectedIndex = NotifyWindow.getConfig();
+				prefAPI.value = StreamContainer.updateTwitterInterval / 60000;
+			}
+			
+			public function onClose():void
+			{
+				PopUpManager.removePopUp(this);
+				isShowing = false;
+			}
+
+			protected function prefAutoStart_clickHandler(event:MouseEvent):void
+			{
+				try{
+					NativeApplication.nativeApplication.startAtLogin = prefAutoStart.selected;
+				}catch(e:Error) {
+					trace(e.getStackTrace(), 'prefAutoStart_clickHandler');
+					event.preventDefault();
+				}
+			}
+
+			protected function prefAPI_changeHandler(event:Event):void
+			{
+				StreamContainer.setTwitterAPIInterval(prefAPI.value);
+			}
+
+			[Bindable]
+			public static var notifyPositions:ArrayCollection = new ArrayCollection([
+				{label: 'Off', value:'off'},
+				{label: 'Top left', value:'lt'},
+				{label: 'Top right', value:'rt'},
+				{label: 'Bottom left', value:'lb'},
+				{label: 'Bottom right', value:'rb'}
+			]);
+
+
+			protected function prefNotify_changeHandler(event:IndexChangeEvent):void
+			{
+				NotifyWindow.setConfig(prefNotify.selectedItem.value);
+			}
+			
+			protected function prefStackUpdate_clickHandler(event:MouseEvent):void
+			{
+				Base.updateStack = prefStackUpdate.selected;
+				ConfigDB.set('lf_update_stack', prefStackUpdate.selected?'t':'f');
+			}
+			protected function prefFontSize_clickHandler(event:MouseEvent):void
+			{
+				Base.stream.stream.styleName = prefFontSize.selected ? 'big':'';
+				ConfigDB.set('stream_font_big', prefFontSize.selected?'t':'f');
+			}
+
+		]]>
+	</fx:Script>
+	<fx:Declarations>
+		<s:RadioButtonGroup id="radiogroup1"/>
+	</fx:Declarations>
+	<mx:Form left="10" right="10" top="10" bottom="23" color="0x333333" fontWeight="bold" fontSize="13">
+		<mx:FormItem label="Start at login" click="prefAutoStart_clickHandler(event)">
+			<s:CheckBox id="prefAutoStart" />
+		</mx:FormItem>
+		<mx:FormItem label="Notification">
+			<s:DropDownList id="prefNotify" dataProvider="{notifyPositions}" fontSize="13" change="prefNotify_changeHandler(event)" width="150" />
+		</mx:FormItem>
+		<mx:FormItem label="Update method" click="prefStackUpdate_clickHandler(event)" verticalGap="0">
+			<s:RadioButton label="auto-scroll" groupName="radiogroup1" id="prefStackUpdate2" />
+			<s:RadioButton label="manual refresh" groupName="radiogroup1" id="prefStackUpdate" />
+		</mx:FormItem>
+		<mx:FormItem label="Use large font" click="prefFontSize_clickHandler(event)">
+			<s:CheckBox id="prefFontSize" />
+		</mx:FormItem>
+		<mx:FormItem label="Twitter API usage">
+			<s:HSlider id="prefAPI" change="prefAPI_changeHandler(event)" maximum="15" minimum="1" stepSize="1" value="1" />
+		</mx:FormItem>
+		<mx:FormItem>
+			<s:Label text="{'once every '+(prefAPI.value)+' minute'+(prefAPI.value>1?'s':'')}"/>
+		</mx:FormItem>
+	</mx:Form>
+	
+	<!--
+	<s:Label id="linkBookmarklet" text="Click to connect your browser with Lazyscope." bottom="12" horizontalCenter="0" left="50%" color="0x0279B4" textDecoration="none" rollOver="linkBookmarklet.setStyle('textDecoration', 'underline')" rollOut="linkBookmarklet.setStyle('textDecoration', 'none')" click="Base.sidebar.getBookmarketlet()" useHandCursor="true" buttonMode="true" mouseChildren="true" />
+	-->
+	
+</s:TitleWindow>

@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:ItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+				xmlns:s="library://ns.adobe.com/flex/spark" 
+				xmlns:mx="library://ns.adobe.com/flex/mx" 
+				xmlns:fl="flexlib.controls.*"
+				width="223"
+				autoDrawBackground="true" clipAndEnableScrolling="true" xmlns:lazyfeed="com.lazyfeed.*">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyfeed.twitter.Twitter;
+			
+			import flash.events.*;
+			
+			import mx.controls.Alert;
+			
+			override public function set data(value:Object):void
+			{
+				if (!value) return;
+				title.text = value.name;
+				
+				switch (value.type) {
+					case 1:
+						icon.source = 'icon/icon_Lazyscope.png';
+						icon.left = 5;
+						icon.width = 16;
+						icon.height = 16;
+						title.left = 29;
+						line1.top = -1;
+						line2.top = -1;
+						container.height = 28;
+						enabled = true;
+						break;
+					case 2:
+						icon.source = 'icon/icon_Twitter.png';
+						line1.top = 0;
+						line2.top = -1;
+						icon.left = 5;
+						icon.width = 16;
+						icon.height = 16;
+						title.left = 29;
+						container.height = 28;
+						enabled = true;
+						break;
+					case 3:
+					case 6:
+						if (value.type == 3) {
+							icon.source = 'img/icon_lists_16x16.gif';
+							line1.top = -1;
+						}else{
+							icon.source = 'img/icon_blogs_16x16.png';
+							line1.top = 0;
+						}
+						line2.top = -1;
+						icon.left = 5;
+						icon.width = 16;
+						icon.height = 16;
+						title.left = 29;
+						container.height = 28;
+						enabled = false;
+						break;
+					case 4:
+					case 5:
+						icon.left = -20;
+						title.left = 18;
+						line1.top = -1;
+						line2.top = -1;
+						container.height = title.height + 6 + 6;
+						enabled = true;
+						break;
+					case 7:
+						icon.left = -20;
+						title.left = 18;
+						line1.top = -1;
+						line2.top = -1;
+						container.height = title.height + 6 + 6;
+						enabled = true;
+						break;
+				}
+				
+				setStyle('selectionColor', 0xE4E4DA);
+			}
+		]]>
+	</fx:Script>
+	
+	<s:BorderContainer id="container" borderVisible="false" width="100%" backgroundAlpha="0">
+		<s:Line id="line1" left="3" right="3">
+			<s:stroke>
+				<s:SolidColorStroke color="#AAAAAA" />
+			</s:stroke>
+		</s:Line>
+		<s:Line id="line2" left="3" right="3">
+			<s:stroke>
+				<s:SolidColorStroke color="#000000" />
+			</s:stroke>
+		</s:Line>
+		
+		<s:Image id="icon" top="6" />
+		<s:Label id="title" top="9" height="16" />
+	</s:BorderContainer>
+	
+</s:ItemRenderer>

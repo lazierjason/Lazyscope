@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  xmlns:mx="library://ns.adobe.com/flex/mx"
+		  width="100%" height="16" clipAndEnableScrolling="true">
+
+	<fx:Script>
+		<![CDATA[
+			public var snap:ContentSnapshot = null;
+			public var tweet_changeHandler:Function;
+			protected function ckbox_clickHandler(event:MouseEvent):void
+			{
+				if (snap)
+					snap.isSelected = ckbox.selected;
+				
+				tweet_changeHandler();
+			}
+		]]>
+	</fx:Script>
+
+	<s:CheckBox id="ckbox" selected="true" left="5" width="8" height="8" top="4" click="ckbox_clickHandler(event)" />
+	<s:Label id="title" left="22" top="4" right="5" maxDisplayedLines="1" color="0x505050" fontSize="11" />
+</s:Group>

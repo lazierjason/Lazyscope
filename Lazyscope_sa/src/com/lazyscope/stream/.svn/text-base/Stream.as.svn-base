@@ -1,0 +1,9 @@
+package com.lazyfeed.stream
+{
+	public class Stream
+	{
+		public function Stream()
+		{
+		}
+	}
+}

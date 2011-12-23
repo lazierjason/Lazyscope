@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="utf-8"?>
+<stream:StreamItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+						   xmlns:s="library://ns.adobe.com/flex/spark" 
+						   xmlns:mx="library://ns.adobe.com/flex/mx"
+						   xmlns:lazyfeed="com.lazyfeed.*"
+						   xmlns:stream="com.lazyfeed.stream.*"
+						   xmlns:control="com.lazyfeed.control.*"
+						   click="onFocusIn(this, true, true)"
+						   rollOver="clearHighlight();"
+						   clipAndEnableScrolling="true">
+	<fx:Declarations>
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyfeed.Base;
+			import com.lazyfeed.CachedImage;
+			import com.lazyfeed.Util;
+			import com.lazyfeed.control.Spinner;
+			import com.lazyfeed.crawl.FeedFuncRequest;
+			import com.lazyfeed.crawl.FeedFuncRequestEvent;
+			import com.lazyfeed.entry.StreamEntry;
+			import com.lazyfeed.notifier.NotifyWindow;
+			import com.swfjunkie.tweetr.data.objects.StatusData;
+			
+			import mx.utils.URLUtil;
+			
+			public static var loadingSpins:Array = new Array;
+			
+			public static function removeSpinner(e:StreamEntry):void
+			{
+				if (!e.renderer) return;
+				if (e.renderer.spinners.numElements > 0) {
+					var sp:Spinner = Spinner(e.renderer.spinners.getElementAt(0));
+					e.renderer.spinners.removeElement(sp);
+					sp.stop();
+					loadingSpins.push(sp);
+				}
+			}
+			
+			public static function addSpinner(e:StreamEntry):void
+			{
+				if (!e.renderer || e.renderer.spinners.numElements > 0) return;
+				var spinner:Spinner = Spinner(loadingSpins.shift());
+				if(!spinner) {
+					spinner = new Spinner;
+				}
+				e.renderer.spinners.addElement(spinner);
+				spinner.start();
+			}
+			
+			public static function getContent(e:StreamEntry, isUpdated:Boolean=false):void
+			{
+				if (e.childRequesting || !e.link) return;
+				e.childRequesting = true;
+				
+				e._todoLinkCount = !isNaN(e._todoLinkCount) ? e._todoLinkCount : 1;
+				getContent2(e, e.link, isUpdated);
+			}
+			
+			/*
+			public static function clearHighlight2(obj:Object):void
+			{
+			var e:StreamEntry = obj.data as StreamEntry;
+			if (e && e.child && e.child.numElements > 0) {
+			for (var i:Number=0; i < e.child.numElements; i++) {
+			var el:Object = e.child.getElementAt(i);
+			if (el is StreamItemRendererBlogInTwitter)
+			el.clearHighlight();
+			else if (el is StreamItemRendererTwitterFail)
+			el.setStyle('alternatingItemColors', bgcolor);
+			}
+			}
+			}
+			*/
+			
+			public static function getContentSuccess(event:FeedFuncRequestEvent):void
+			{
+				if (event.req) {
+					event.req.removeEventListener(FeedFuncRequestEvent.SUCCESS, getContentSuccess);
+					event.req.removeEventListener(FeedFuncRequestEvent.FAIL, getContentFail);
+					event.req = null;
+				}
+				
+				if (!event.userData) return;
+				var e:StreamEntry = event.userData.streamEntry;
+				event.userData = null;
+				
+				//url:String, urlEndpoint:String, entry:BlogEntry, userData:Object
+				if (e.child) {
+					var se:StreamEntry = StreamEntry.blog(event.entry);
+					
+					// to eliminate snapshot link
+					var host:String = URLUtil.getServerName(se.link);
+					if (host.match(/\btwitpic\.com$/) && se.description && se.description.match(/This preview was created using http:\/\/lazyscope\.com\/snap/)) {
+						e._todoLinkCount--;
+						if (e.child.numChildren >= e._todoLinkCount)
+							removeSpinner(e);
+						se.destroy();
+						return;
+					}
+					
+//					var v:StreamItemRendererBlogInTwitter = new StreamItemRendererBlogInTwitter;
+					var v:StreamItemRendererBlogInFavoriteLink = new StreamItemRendererBlogInFavoriteLink;
+					v.data = se;
+					
+					e.child.addElement(v);
+					e.child.minHeight = NaN;
+					
+					if (e.child.numChildren >= e._todoLinkCount)
+						removeSpinner(e);
+				}
+				
+			}
+			
+			public static function getContentFail(event:FeedFuncRequestEvent):void
+			{
+				if (!event) return;
+				if (event.req) {
+					event.req.removeEventListener(FeedFuncRequestEvent.SUCCESS, getContentSuccess);
+					event.req.removeEventListener(FeedFuncRequestEvent.FAIL, getContentFail);
+					event.req = null;
+				}
+				
+				if (!event.userData) return;
+				var e:StreamEntry = event.userData.streamEntry;
+				if (!e || !e.child) return;
+				event.userData = null;
+				
+				var fail:StreamItemRendererFavoriteLinkFail = new StreamItemRendererFavoriteLinkFail;
+				
+				fail.title.text = (event.title ? event.title : (event.url?event.url:'')).replace(/^\s+/, '').replace(/\s+$/, '').replace(/\s+/, ' ').replace(/<[^>]+>/g, '');
+				
+				fail.url.text = event.url ? event.url.replace(/^\s+/, '').replace(/\s+$/, '').replace(/\s+/, ' ') : '';
+				fail.urlEndpoint = event.urlEndpoint ? event.urlEndpoint.replace(/^\s+/, '').replace(/\s+$/, '').replace(/\s+/, ' ') : '';
+				fail.readabilityFail = event.readabilityFail;
+				
+				var failEntry:StreamEntry = new StreamEntry;
+				failEntry.type = 'B';
+				failEntry.link = fail.url.text;
+				failEntry.title = fail.title.text;
+				fail.data = failEntry; 
+				
+				if (e.child) {
+					e.child.addElement(fail);
+					e.child.minHeight = NaN;
+					
+					if (e.child.numChildren >= e._todoLinkCount)
+						removeSpinner(e);
+				}
+			}
+			
+			public static function getContent2(e:StreamEntry, link:String, isUpdated:Boolean=false):void
+			{
+				if (!e.child) {
+					e.child = new VGroup;
+					e.child.width = 340;
+					e.child.minHeight = 100;
+					e.child.gap = 0;
+				}
+				
+				addSpinner(e);
+				
+				var req:FeedFuncRequest = new FeedFuncRequest(link, {streamEntry:e}, isUpdated);
+				req.addEventListener(FeedFuncRequestEvent.SUCCESS, getContentSuccess, false, 0, true);
+				req.addEventListener(FeedFuncRequestEvent.FAIL, getContentFail, false, 0, true);
+				req.run();
+			}
+			
+			public static function __data(obj:StreamItemRendererFavoriteLink, e:StreamEntry):void
+			{
+				try{
+					obj.opaqueBackground = e.isUpdated?0xF4FAFD:null;
+					
+					obj.favoritedLink.text = e.link;
+					obj.registeredTime.text = Util.toIntervalString(e.published.getTime()/1000);
+					
+					e.renderer = obj;
+					
+					if (obj.entryChild.numElements > 0)
+						obj.entryChild.removeAllElements();
+					
+					if (!e.child && !e.childRequesting && e.link) {
+						getContent(e);
+					}
+					
+					if (e.child) {
+						obj.entryChild.addElement(e.child);
+						if (e.child.numChildren + obj.spinners.numElements < e._todoLinkCount) {
+							for (var i:Number=1-(e.child.numChildren + obj.spinners.numElements); i--;)
+								addSpinner(e);
+						}
+					}
+					
+					if (StreamItemRenderer.focusedData == e && e.renderer)
+						StreamItemRenderer.onFocusIn(e.renderer, false);
+				}catch(e:Error){
+					trace(e.getStackTrace(), '__data render fl');
+				}
+			}
+			
+			override public function set data(value:Object):void
+			{
+				if (super.data == value) return;
+				if (!value) {
+					super.data = value;
+					return;
+				}
+				
+				try{
+					var e:StreamEntry;
+					e = value as StreamEntry;
+					if (super.data && StreamEntry(super.data).sid == e.sid) {
+						trace('same!!!!!!!!!!!!!!!');
+						return;
+					}
+					
+					if (!e.link) return;
+					
+					super.data = value;
+					
+					__data(this, e);
+				}catch(error:Error) {
+					trace(error.getStackTrace(), 'set data render tw2');
+				}
+			}
+		]]>
+	</fx:Script>
+	
+	<s:VGroup width="100%" top="0" bottom="0" gap="0">
+		
+		<s:HGroup id="favoriteLinkContainer" width="100%" visible="false" includeInLayout="false">
+			<s:Label id="favoritedLink" text="a" />
+			<s:Label id="registeredTime" />
+			<s:Group id="spinners" width="13" height="9" clipAndEnableScrolling="true" />
+		</s:HGroup>
+		
+		<!--
+		<mx:Spacer height="4" />
+		-->
+		
+		<s:VGroup id="entryChild" width="100%" clipAndEnableScrolling="true" />
+		
+		<s:Group id="btns" width="100%" includeInLayout="false" />
+	</s:VGroup>
+	
+	<s:Line left="0" width="100%" bottom="0">
+		<s:stroke>
+			<s:SolidColorStroke color="0xAAAAAA" />
+		</s:stroke>
+	</s:Line>
+</stream:StreamItemRenderer>

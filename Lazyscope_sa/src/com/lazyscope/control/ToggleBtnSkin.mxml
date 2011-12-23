@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Skin xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		xmlns:s="library://ns.adobe.com/flex/spark" 
+		xmlns:mx="library://ns.adobe.com/flex/mx"
+		useHandCursor="true" buttonMode="true" mouseChildren="true"
+		creationComplete="onCreationCompleteHandler(event)">
+	<!-- host component -->
+	<fx:Metadata>
+		[HostComponent("com.lazyscope.control.ToggleBtn")]
+	</fx:Metadata>
+	
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			private function iconPrefix(type:String):Object
+			{
+				if (hostComponent && hostComponent.iconPrefix) {
+					var fname:String = '/button/'+(hostComponent.iconPrefix)+'_'+type+'.png';
+					var f:File = new File('app://'+fname);
+//trace('***', fname, f.exists);
+					if (f.exists) return fname;
+					return '/button/dummy.png';
+				}
+				return null;
+			}
+
+			protected function onCreationCompleteHandler(event:FlexEvent):void
+			{
+				setTimeout(function():void {
+					currentState = 'downAndSelected';
+					setTimeout(function():void {
+						currentState = 'down';
+						setTimeout(function():void {
+							currentState = 'upAndSelected';
+							setTimeout(function():void {
+								currentState = 'up';
+								setTimeout(function():void {
+									currentState = 'overAndSelected';
+									setTimeout(function():void {
+										currentState = 'over';
+										setTimeout(function():void {
+											if (hostComponent.selected)
+												currentState = 'upAndSelected';
+											else
+												currentState = 'up';
+										}, 7);
+									}, 7);
+								}, 7);
+							}, 7);
+						}, 7);
+					}, 7);
+				}, 7);
+			}
+		]]>
+	</fx:Script>
+	
+	<!-- states -->
+	<s:states>
+		<s:State name="disabledAndSelected" />
+		<s:State name="downAndSelected" />
+		<s:State name="overAndSelected" />
+		<s:State name="upAndSelected" />
+		<s:State name="disabled" />
+		<s:State name="down" />
+		<s:State name="over" />
+		<s:State name="up" />
+	</s:states>
+	
+	<!-- SkinParts
+	name=labelDisplay, type=spark.components.supportClasses.TextBase, required=false
+	-->
+	
+	<fx:DesignLayer>
+		<s:Image cachePolicy="on" width="{hostComponent.width}" height="{hostComponent.height}" smooth="true" source="{iconPrefix('up')}" x="0" y="0" includeIn="up" id="imgup"/>
+		<s:Image cachePolicy="on" width="{hostComponent.width}" height="{hostComponent.height}" smooth="true" source="{iconPrefix('disabled')}" x="0" y="0" includeIn="disabled,disabledAndSelected" id="imgdisabled"/>
+		<s:Image cachePolicy="on" width="{hostComponent.width}" height="{hostComponent.height}" smooth="true" source="{iconPrefix('over')}" x="0" y="0" includeIn="over" id="imgover"/>
+		<s:Image cachePolicy="on" width="{hostComponent.width}" height="{hostComponent.height}" smooth="true" source="{iconPrefix('down')}" x="0" y="0" includeIn="down,upAndSelected,overAndSelected,downAndSelected" id="imgdown"/>
+	</fx:DesignLayer>
+</s:Skin>

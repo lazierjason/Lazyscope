@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Window xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  xmlns:mx="library://ns.adobe.com/flex/mx"
+		  addedToStage="onAddedToStage()" showStatusBar="false">
+	
+	<fx:Script>
+		<![CDATA[
+			public var url:String;
+			
+			public static function show(url:String, width:Number, height:Number):void
+			{
+				var n:NoticeWindow = new NoticeWindow;
+				n.width = width;
+				n.height = height;
+				n.url = url;
+				n.open();
+			}
+			
+			public function onAddedToStage():void
+			{
+				nativeWindow.activate();
+				nativeWindow.y = ((Screen.mainScreen.visibleBounds.height - Screen.mainScreen.visibleBounds.y) - height)/2;
+				nativeWindow.x = ((Screen.mainScreen.visibleBounds.width - Screen.mainScreen.visibleBounds.x) - width)/2;
+				
+				html.htmlLoader.window.windowClose = close;
+				html.location = url;
+			}
+		]]>
+	</fx:Script>
+	
+	<mx:HTML width="100%" height="100%" id="html" />
+</s:Window>

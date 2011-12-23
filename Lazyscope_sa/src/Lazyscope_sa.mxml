@@ -1,0 +1,620 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:WindowedApplication xmlns:fx="http://ns.adobe.com/mxml/2009" 
+					   xmlns:s="library://ns.adobe.com/flex/spark" 
+					   xmlns:mx="library://ns.adobe.com/flex/mx"
+					   xmlns:stream="com.lazyscope.stream.*"
+					   xmlns:toolbar="com.lazyscope.toolbar.*"
+					   xmlns:content="com.lazyscope.content.*"
+					   xmlns:control="com.lazyscope.control.*"
+					   xmlns:lazyscope="com.lazyscope.*"
+					   xmlns:sidebar="com.lazyscope.sidebar.*"
+					   width="695" minWidth="695" maxWidth="695" height="500" minHeight="300" backgroundColor="0xFFFFFF"
+					   frameRate="16" colorCorrection="on" showStatusBar="false"
+					   networkChange="networkChangeHandler(event)" closing="onWindowClosing(event)"
+					   creationComplete="initApp(event);" xmlns:twitter="com.lazyscope.twitter.*">
+	
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+		@namespace mx "library://ns.adobe.com/flex/mx";
+		@namespace stream "com.lazyscope.stream.*";
+		@namespace toolbar "com.lazyscope.toolbar.*";
+		@namespace content "com.lazyscope.content.*";
+		@namespace control "com.lazyscope.control.*";
+		@namespace lazyscope "com.lazyscope.*";
+		@namespace sidebar "com.lazyscope.sidebar.*";
+		
+		.font11 {
+			fontSize:11;
+		}
+		.font12 {
+			fontSize:12;
+			lineHeight:14;
+		}
+		.font13 {
+			fontSize:13;
+			lineHeight:15;
+		}
+		.font15 {
+			fontSize:15;
+			lineHeight:16;
+		}
+		.blogName {
+			maxHeight:24;
+			lineHeight:13;
+		}
+		
+		
+		.big .font11 {
+			fontSize:13;
+		}
+		.big .font12 {
+			fontSize:14;
+			lineHeight:16;
+		}
+		.big .font13 {
+			fontSize:15;
+			lineHeight:16;
+		}
+		.big .font15 {
+			fontSize:17;
+			lineHeight:18;
+		}
+		.big .blogName {
+			maxHeight:29;
+			lineHeight:15;
+		}
+		
+	</fx:Style>
+	
+	<fx:Script>
+		<![CDATA[
+			import air.update.ApplicationUpdaterUI;
+			import air.update.events.UpdateEvent;
+			
+			import com.lazyscope.Base;
+			import com.lazyscope.ConfigDB;
+			//import com.lazyscope.DataServer;
+			import com.lazyscope.Notice;
+			import com.lazyscope.NoticeWindow;
+			import com.lazyscope.UIFrame;
+			import com.lazyscope.URL;
+			import com.lazyscope.Util;
+			import com.lazyscope.content.ContentSnapshotActivate;
+			import com.lazyscope.control.FocusMarkerFloating;
+			import com.lazyscope.control.PreviewBtn;
+			import com.lazyscope.crawl.Crawler;
+			import com.lazyscope.crawl.OPMLImport;
+			import com.lazyscope.crawl.WorkingQueue;
+			import com.lazyscope.entry.Blog;
+			import com.lazyscope.entry.StreamEntry;
+			import com.lazyscope.notifier.NotifyWindow;
+			import com.lazyscope.stream.StreamItemRenderer;
+			import com.lazyscope.stream.StreamItemRendererTwitterButtons;
+			import com.lazyscope.toolbar.PreferenceWindow;
+			import com.lazyscope.toolbar.SubscribeWindow;
+			import com.lazyscope.twitter.TweetWindow;
+			import com.lazyscope.twitter.Twitter;
+			import com.swfjunkie.tweetr.data.objects.CursorData;
+			
+			import mx.managers.PopUpManager;
+			
+			private static const FRAMERATE:Number = 16;
+			
+			private var appUpdated:Boolean = false;
+			private var appUpdater:ApplicationUpdaterUI = null;
+			
+			public function checkUpdate():void
+			{
+				if (!appUpdater) {
+					appUpdater = new ApplicationUpdaterUI;
+					
+					appUpdater.updateURL = 'http://www.lazyscope.com/update_2.5.xml';
+					appUpdater.delay = 0;
+					appUpdater.addEventListener(UpdateEvent.INITIALIZED, function(event:UpdateEvent):void {
+						appUpdater.checkNow();
+					});
+				}
+				
+				Crawler.downloadURL('http://www.lazyscope.com/update_2.5.xml', function(url:String, body:String, httpStatus:Number):void {
+					if (!body || httpStatus != 200) return;
+					try{
+						var data:XML = new XML(body);
+						if (!data) return;
+						
+						var ns:Namespace = data.namespace();
+						if (data.ns::versionNumber && appUpdater.currentVersion != data.ns::versionNumber) {
+							appUpdated = true;
+							setTimeout(_checkUpdate, 1000);
+						}
+					}catch(e:Error) {
+						trace(e.getStackTrace(), 'checkUpdate');
+						return;
+					}
+				});
+			}
+			
+			public function _checkUpdate():void
+			{
+				if (WorkingQueue.session().queue.length <= 0) {
+					appUpdater.initialize();
+					
+					setTimeout(checkUpdate, 1000*60*60*6);
+				}else{
+					setTimeout(_checkUpdate, 1000);
+				}
+			}
+			
+			
+			public function initURLRequestDefaults():void
+			{
+				URLRequestDefaults.idleTimeout = 30000;
+				URLRequestDefaults.authenticate = false;
+				URLRequestDefaults.cacheResponse = true;
+				URLRequestDefaults.followRedirects = true;
+				URLRequestDefaults.useCache = true;
+				URLRequestDefaults.manageCookies = true;
+				URLRequestDefaults.userAgent = 'User-Agent:Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_6_4; en-us) AppleWebKit/533.18.1';
+			}
+			
+			public function onShowWindow(event:Event=null):void
+			{
+				visible = true;
+				activate();
+			}
+			
+			private function onWindowClosing(e:Event):void 
+			{
+				if (Capabilities.os.substr(0, 3).toLowerCase() == 'mac') {
+					UIFrame.saveAppWindow();
+					ContentSnapshotActivate.terminate();
+					if (Base.exiting) return;
+					e.preventDefault();
+					visible = false;
+					stage.frameRate = 1;
+				}else{
+					Base.exiting = true;
+					if (notifier) notifier.close();
+				}
+				
+				//minimize();
+			}
+			
+			private function initMenu():void
+			{
+				NativeApplication.nativeApplication.addEventListener(InvokeEvent.INVOKE, onShowWindow, false, 0, true);
+				
+				if (Capabilities.os.substr(0, 3).toLowerCase() == 'mac') {
+					nativeApplication.autoExit = false;
+					nativeApplication.addEventListener(Event.EXITING, function(event:Event):void {
+						Base.exiting = true;
+						notifier.close();
+					});
+				}
+				
+				//TrayMenu.initMenu(this, trayIcon);
+				//removeElement(trayIcon);
+			}
+			
+			public function quit():void
+			{
+				Base.exiting = true;
+				UIFrame.saveAppWindow();
+				visible = false;
+				notifier.close();
+				close();
+				exit();
+			}
+			
+			private var lastRefreshTime:Number = new Date().getTime();
+			private function gc():void
+			{
+				System.gc();
+				System.gc();
+				
+				try {
+					new LocalConnection().connect('foo');
+					new LocalConnection().connect('foo');
+				} catch (e:*) {}
+				
+				//trace('System.gc();');
+				setTimeout(gc, 1000*60);
+				
+				/*
+				if (System.privateMemory > 1024*1024*400 && Base.twitter.ready && lastRefreshTime < (new Date().getTime())-(1000*60*3)) {
+				streamContainer.refresh();
+				lastRefreshTime = new Date().getTime();
+				}
+				*/
+			}
+			
+			public var notifier:NotifyWindow = new NotifyWindow;
+			public function initApp(event:Event):void
+			{
+				trace('Lazyscope start');
+				if (stage) stage.frameRate = FRAMERATE;
+				
+				setTimeout(gc, 1000*60);
+				//setTimeout(checkUpdate, 5000);
+				
+				notifier.activateMainWindow = onShowWindow;
+				if (Capabilities.os.substr(0, 5).toLowerCase() != 'linux')
+					notifier.open(false);
+				
+				initMenu();
+				
+				initURLRequestDefaults();
+				UIFrame.initAppWindow(this);
+				
+				callLater(registerGlobalEvent);
+				
+				//DataServer.request('PS', 'initialize', Blog.postMethodResponse, true);
+				
+				Base.app = this;
+				
+				callLater(function():void {
+					streamContainer.pushNotifyBar(notify, 'globalNotify');
+					Base.init(streamContainer, sidebar, topbar, viewer, contentContainer, notifier, landing, showOPMLImport, navigateInBrowser, userViewer, tweetViewer);
+					
+					NotifyWindow.loadConfig();
+					
+					Base.updateStack = ConfigDB.get('lf_update_stack') == 't' ? true : false;
+					TweetWindow.autoShorten = ConfigDB.get('lf_shorten_setting') == 'off' ? false : true;
+					
+					StreamContainer.initTwitterAPIInterval();
+					stream.styleName = ConfigDB.get('stream_font_big') == 't'?'big':'';
+					
+					Twitter.session().authorize();
+					
+					FocusMarkerFloating.focusMarkerFloating = focusMarkerFloating;
+					
+					UIFrame.showContentFrame();
+					
+					/*
+					setTimeout(function():void {
+						if (ConfigDB.get('notice_preview') != 't') {
+							Notice.show('<p><font size="16"><b>Learn about a new feature:</b><br />You can now attach article previews<br />to Tweets, just like Facebook!</font></p>', function():void {
+								NoticeWindow.show('http://www.lazyscope.com/preview.htm#ver2', 840, 610);
+								ConfigDB.set('notice_preview', 't');
+							});
+						}
+					}, 1000);
+					*/
+				});
+			}
+			
+			public function showOPMLImport():void
+			{
+				if (OPMLImport.opmlImport.inProgress) {
+					OPMLImport.opmlImport.errorInProcess();
+				}else{
+					OPMLImport.opmlImport.clear();
+					PopUpManager.addPopUp(OPMLImport.opmlImport, Base.app, true);
+					PopUpManager.centerPopUp(OPMLImport.opmlImport);
+					OPMLImport.opmlImport.init();
+				}
+			}
+			
+			//private var streamRefreshTimer:uint;
+			public function registerGlobalEvent():void
+			{
+				nativeApplication.addEventListener(Event.ACTIVATE, function(event:Event):void {
+					Base.isMainActivated = true;
+					if (notifier && notifier.alpha == 0) {
+						notifier.visible = false;
+					}
+					if (stage) stage.frameRate=FRAMERATE;
+					//clearInterval(streamRefreshTimer);
+				});
+				
+				nativeApplication.addEventListener(Event.DEACTIVATE, function(event:Event):void {
+					Base.isMainActivated = false;
+					if (notifier) {
+						notifier.visible = true;
+					}
+					if (stage) stage.frameRate=1;
+					/*
+					clearInterval(streamRefreshTimer);
+					streamRefreshTimer = setInterval(stream.refresh, 1000*60, true);
+					*/
+				});
+				
+				addEventListener(Event.ACTIVATE, function(event:Event):void {
+					//trace('addEventListener(Event.ACTIVATE, function(event:Event):void {', event);
+					if (notifier && notifier.alpha == 0) {
+						notifier.visible = false;
+					}
+					stream.setFocus();
+				});
+				
+				/*
+				nativeApplication.idleThreshold = 60*5;
+				nativeApplication.addEventListener(Event.USER_IDLE, function(event:Event):void {
+				clearInterval(streamRefreshTimer);
+				streamRefreshTimer = setInterval(stream.refresh, 1000*60, true);
+				});
+				*/
+				stage.addEventListener(KeyboardEvent.KEY_DOWN, windowedapplication1_keyDownHandler, true, 100, true);
+				
+				
+				//stage.addEventListener(Event.COPY, onCopy, true, 100, true);
+			}
+			
+			protected function networkChangeHandler(event:Event):void
+			{
+				//trace('networkChangeHandler', event);
+				Base.twitterUpdater.networkChanged();
+				streamContainer.wakeupCheck();
+			}
+			
+			protected function getStreamItemRenderer(data:Object, direction:int = 0):StreamItemRenderer
+			{
+				var idx:int = streamContainer.stream.data.getItemIndex(data);
+				if (idx < 0) return null;
+				var newIdx:int = Math.min(Math.max(idx + direction, 0), streamContainer.stream.data.length - 1);
+				var e:StreamEntry = StreamEntry(streamContainer.stream.data.getItemAt(newIdx));
+				streamContainer.stream.ensureIndexIsVisible(newIdx);
+				streamContainer.stream.validate();
+				if (e.renderer)
+					streamContainer.stream.scroller.viewport.verticalScrollPosition = Math.max(streamContainer.stream.scroller.viewport.verticalScrollPosition, e.renderer.y - streamContainer.stream.height + e.renderer.height + 50);
+				streamContainer.onScroll(null);
+				StreamItemRenderer.focusedData = StreamItemRenderer.selectedData = e;
+				return e.renderer;
+			}
+			
+			private function itemSelect():Boolean {
+				if (StreamItemRenderer.focusedData == null) {
+					//TODO: default focus!!?
+				}else{
+					var sir:StreamItemRenderer;
+					sir = getStreamItemRenderer(StreamItemRenderer.focusedData, 0);
+					if (StreamItemRenderer.focusedData.type == 'B') {
+						if (sir) {
+							sir.onClick(true);
+							// return false/true
+						}
+					}else if (sir && sir['entryChild'] && sir['entryChild'].numElements > 0 && sir['entryChild'].getElementAt(0).numElements > 0) {
+						var nextDisplayNode:StreamItemRenderer = StreamItemRenderer(sir['entryChild'].getElementAt(0).getElementAt(0));
+						for (var i:Number = 0; i < sir['entryChild'].getElementAt(0).numElements; i++) {
+							if (sir['entryChild'].getElementAt(0).getElementAt(i) == Base.contentViewer.lastDisplayNode) {
+								if (viewer.focused) {
+									if (i >= sir['entryChild'].getElementAt(0).numElements - 1)
+										nextDisplayNode = null;
+									else
+										nextDisplayNode = sir['entryChild'].getElementAt(0).getElementAt(i+1);
+								}else{
+									nextDisplayNode = Base.contentViewer.lastDisplayNode;
+								}
+								break;
+							}
+						}
+						
+						if (nextDisplayNode) {
+							nextDisplayNode.onClick(true);
+							StreamItemRenderer.selectedData = StreamEntry(nextDisplayNode.data);
+						}else{
+							if (Base.contentViewer.lastDisplayNode && Base.contentViewer.lastDisplayNode.selected) {
+								Base.contentViewer.lastDisplayNode.selected = false;
+								Base.contentViewer.lastDisplayNode = null;
+								Base.contentViewer.data = null;
+								PreviewBtn.BTN.toOpen = true;
+								StreamItemRenderer.selectedData = StreamItemRenderer.focusedData;
+								return true;
+							}
+						}
+					}else{
+						return true;
+					}
+				}
+				return false;
+			}
+			
+			protected function onCopy(event:Event):void
+			{
+			}
+			
+			protected function windowedapplication1_keyDownHandler(event:KeyboardEvent):void
+			{
+				//trace('event.keyCode', event.keyCode);
+				if (!Twitter.session().ready || contentContainer.systemManager.numModalWindows > 0) return;
+				
+				if (SubscribeWindow.isShowing || Util.isShowingAlert) return;
+				
+				if (viewer.focused) {
+					viewer.stage.focus = viewer.html.htmlLoader;
+				}
+				
+				var sir:StreamItemRenderer;
+				switch (event.keyCode) {
+					case 32:	// spacebar
+						if (!userViewer.visible && !viewer.focused) {
+							if (streamContainer.stream.data.length > 0) {
+								if (streamContainer.stream.updateItem.length > 0)
+									streamContainer.stream.updateItemFlush();
+								else{
+									streamContainer.stream.refresh(true);
+									setTimeout(streamContainer.stream.focusReset, 10);
+								}
+								stage.focus = streamContainer.stream;
+							}
+							event.stopPropagation();
+							event.preventDefault();
+						}
+						break;
+					case 13:	// enter
+						if (!userViewer.visible && !viewer.focused) {
+							if (StreamItemRenderer.focusedData) {
+								if (StreamItemRenderer.focusedData.type == 'B') {
+									viewer.toPost(StreamItemRenderer.focusedData.link, StreamItemRenderer.focusedData.title, StreamItemRenderer.focusedData);
+								}else if (StreamItemRenderer.focusedData.renderer && StreamItemRenderer.focusedData.type == 'T') {
+									StreamItemRendererTwitterButtons.repost(null, StreamItemRenderer.focusedData);
+								}
+								event.stopPropagation();
+								event.preventDefault();
+								
+								if (StreamItemRenderer.focusedData && StreamItemRenderer.focusedData.renderer)
+									StreamItemRenderer.focusedData.renderer.clearHighlight();
+							}
+						}
+						break;
+					case 82:	// R (reply)
+						if (!userViewer.visible && !viewer.focused) {
+							if (StreamItemRenderer.focusedData && StreamItemRenderer.focusedData.renderer) {
+								if (StreamItemRenderer.focusedData.type == 'T' || StreamItemRenderer.focusedData.type == 'M')
+									StreamItemRendererTwitterButtons.reply(null, StreamItemRenderer.focusedData);
+								event.stopPropagation();
+								event.preventDefault();
+								
+								StreamItemRenderer.focusedData.renderer.clearHighlight();
+							}
+						}
+						break;
+					case 39:	// right
+						if (!userViewer.visible && StreamItemRenderer.focusedData && StreamItemRenderer.focusedData.renderer) {
+							StreamItemRenderer.focusedData.renderer.clearHighlight();
+							
+							if (StreamItemRenderer.focusedData && StreamItemRenderer.focusedData.type == 'B' && viewer.focused) {
+								viewer.focused = false;
+							}else{
+								viewer.focused = itemSelect() != true;
+								if (viewer.focused)
+									callLater(StreamItemRendererTwitterButtons.hide);
+							}
+							event.stopPropagation();
+							event.preventDefault();
+						}
+						break;
+					case 37:	// left
+						if (!userViewer.visible && StreamItemRenderer.focusedData && StreamItemRenderer.focusedData.renderer) {
+							StreamItemRenderer.focusedData.renderer.clearHighlight();
+							
+							if (viewer.focused) {
+								var tmpSelectedData:StreamEntry = StreamItemRenderer.selectedData;
+								viewer.focused = false;
+								StreamItemRenderer.selectedData = tmpSelectedData;
+							}else{
+								UIFrame.hideContentFrame();
+							}
+							event.stopPropagation();
+							event.preventDefault();
+						}
+						break;
+					case 38:	// up
+						if (!userViewer.visible && !viewer.focused) {
+							if (StreamItemRenderer.focusedData && StreamItemRenderer.focusedData.renderer)
+								StreamItemRenderer.focusedData.renderer.clearHighlight();
+							
+							if (StreamItemRenderer.focusedData == null) {
+								//TODO: default focus!!?
+							}else{
+								sir = getStreamItemRenderer(StreamItemRenderer.focusedData, -1);
+								if (sir) {
+									//									StreamItemRenderer.selectedData = null;
+									StreamItemRenderer.onFocusIn(sir);
+								}
+							}
+						}
+						if (!viewer.focused) {
+							event.stopPropagation();
+							event.preventDefault();
+						}
+						break;
+					case 40:	// down
+						if (!userViewer.visible && !viewer.focused) {
+							if (StreamItemRenderer.focusedData && StreamItemRenderer.focusedData.renderer)
+								StreamItemRenderer.focusedData.renderer.clearHighlight();
+							
+							if (StreamItemRenderer.focusedData == null) {
+								//TODO: default focus!!?
+							}else{
+								sir = getStreamItemRenderer(StreamItemRenderer.focusedData, +1);
+								if (sir) {
+									//									StreamItemRenderer.selectedData = null;
+									StreamItemRenderer.onFocusIn(sir);
+								}
+							}
+						}
+						if (!viewer.focused) {
+							event.stopPropagation();
+							event.preventDefault();
+						}
+						break;
+					case 33:	// page up
+					case 34:	// page down
+						if (!viewer.focused) {
+							event.stopPropagation();
+						}
+						break;
+				}
+			}
+			
+			public function navigateInBrowser(url:String):void
+			{
+				if (!url) return;
+				navigateToURL(new URLRequest(url));
+			}
+			
+			public function onClickSignOut(e:Event=null):void
+			{
+				if (Base.ready) {
+					if (OPMLImport.opmlImport.inProgress) {
+						OPMLImport.opmlImport.errorInProcess();
+					}else{
+						Base.twitter.disconnect();
+						callLater(Base.twitter.authorize);
+					}
+				}else{
+					Base.twitter.authorize();
+				}
+			}
+			
+			public function onFeedbackClick():void
+			{
+				Base.navigateInBrowser('http://www.lazyscope.com/feedback.html?ver='+(Util.getVersion())+(Base.userid ? ('&userid='+(Base.userid)) : ''));
+			}
+		]]>
+	</fx:Script>
+	
+	<!-- <s:Image id="trayIcon" source="app:///icon/icon128.png" complete="initMenu()" /> -->
+	
+	<sidebar:Topbar id="topbar" width="100%" top="0" height="26" />
+	
+	<sidebar:Sidebar id="sidebar" left="0" top="{topbar.height}" bottom="24" width="160" includeInLayout="{sidebar.visible}" />
+	
+	<s:BorderContainer id="contentContainer" borderVisible="false" top="{topbar.height}" left="{sidebar.visible?sidebar.width:0}" width="100%" bottom="24" backgroundColor="#F2F1E9">
+		<stream:StreamContainer stream="{stream}" id="streamContainer" errorMsg="{streamErrorMsg}" loading="{streamLoading}" emptyMsg="{emptyMessage}" top="0" bottom="{streamErrorMsg.height}" left="0" width="{stream.width}">
+			<stream:StreamUpdateBar id="StreamUpdateBar" streamList="{stream}" width="{stream.width}" top="0" />
+			<stream:StreamList id="stream" streamUpdateBar="{StreamUpdateBar}" width="375" bottom="0" rollOver="stream._mouseOver=true" rollOut="stream._mouseOver=false" top="{StreamUpdateBar.height}" />
+			<!-- <stream:StreamNotifier id="streamNotifier" left="0" top="0" width="{stream.width-15}" height="0" /> -->
+			<toolbar:NotifyBar id="notify" width="{stream.width-15}" top="{StreamUpdateBar.height}" />
+			<control:Spinner id="streamLoading" left="158" top="80" scaleX="3" scaleY="3" visible="false" />
+			<s:Label id="emptyMessage" left="20" right="20" top="100" visible="false" text="No content!" fontSize="14" color="0x666666" textAlign="center" />
+			
+			<control:FocusMarkerFloating id="focusMarkerFloating" x="1" y="1" />
+		</stream:StreamContainer>
+		
+		<stream:StreamErrorMsg id="streamErrorMsg" left="0" bottom="0" width="{stream.width}" height="0" />
+		
+		<content:ContentViewer id="viewer" top="0" right="0" left="{stream.width}" height="100%" visible="false" />
+		
+		<twitter:TwitterUserViewer id="userViewer" top="0" left="0" width="{stream.width}" height="100%" visible="false" />
+		
+		<twitter:TwitterTweetViewer id="tweetViewer" top="0" left="0" width="{stream.width}" height="100%" visible="false" />
+		
+		<lazyscope:Landing id="landing" top="0" right="0" left="{stream.width}" height="100%" visible="{!viewer.visible}" />
+	</s:BorderContainer>
+	
+	<s:BorderContainer id="statusBar" width="100%" left="0" bottom="0" height="24" backgroundColor="0xDCDCDC" borderVisible="false">
+		<s:HGroup width="100%" gap="0">
+			<s:HGroup paddingTop="8" paddingLeft="8" gap="10">
+				<s:Label id="preference" color="0x444444" fontSize="11" text="Preference" click="PreferenceWindow.show()" rollOver="preference.setStyle('textDecoration', 'underline')" rollOut="preference.setStyle('textDecoration', 'none')" textDecoration="none" useHandCursor="true" buttonMode="true" />
+				<s:Label id="signout" color="0x444444" fontSize="11" text="Sign Out" click="onClickSignOut(event)" rollOver="signout.setStyle('textDecoration', 'underline')" rollOut="signout.setStyle('textDecoration', 'none')" textDecoration="none" useHandCursor="true" buttonMode="true" />
+			</s:HGroup>
+			
+			<mx:Spacer width="100%" />
+			
+			<s:HGroup paddingTop="8" paddingRight="15" gap="10" visible="false" includeInLayout="false">
+				<s:Label id="feedback" color="0x444444" fontSize="11" text="Feedback" click="onFeedbackClick()" rollOver="feedback.setStyle('textDecoration', 'underline')" rollOut="feedback.setStyle('textDecoration', 'none')" textDecoration="none" useHandCursor="true" buttonMode="true" />
+			</s:HGroup>
+		</s:HGroup>
+	</s:BorderContainer>
+</s:WindowedApplication>

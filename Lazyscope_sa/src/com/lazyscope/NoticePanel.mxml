@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx" close="titlewindow1_closeHandler(event)">
+	
+	<fx:Declarations>
+		<fx:String id="html" />
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import flashx.textLayout.conversion.TextConverter;
+			
+			import mx.events.CloseEvent;
+			import mx.managers.PopUpManager;
+			public static function show(title:String, html:String):void
+			{
+				var w:NoticePanel = new NoticePanel;
+				w.title = title;
+				w.html = html;
+				PopUpManager.addPopUp(w, Base.app, true);
+				PopUpManager.centerPopUp(w);
+			}
+
+			protected function _html_addedToStageHandler(event:Event):void
+			{
+				_html.textFlow = TextConverter.importToFlow(html, TextConverter.TEXT_FIELD_HTML_FORMAT);
+			}
+
+
+			protected function titlewindow1_closeHandler(event:CloseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+
+		]]>
+	</fx:Script>
+	
+	<s:RichEditableText id="_html" addedToStage="_html_addedToStageHandler(event)" editable="false" width="100%" height="100%" paddingBottom="10" paddingLeft="15" paddingRight="15" paddingTop="10" />
+	
+</s:TitleWindow>

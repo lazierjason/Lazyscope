@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx"
+		 useHandCursor="true" buttonMode="true" visible="{count == 0 || isNaN(count)?false:true}">
+	
+	<fx:Declarations>
+		<fx:uint id="bgcolor" />
+		<fx:uint id="color" />
+		<fx:Number id="count">0</fx:Number>
+	</fx:Declarations>
+
+	<s:Group left="-5">
+		<s:Rect radiusX="6" radiusY="6" width="100%" height="100%" verticalCenter="0" horizontalCenter="0">
+			<s:fill>
+				<s:SolidColor color="{bgcolor?bgcolor:0xE83922}" />
+			</s:fill>
+			<s:stroke>
+				<s:SolidColorStroke color="{color?color:0xFFFFFF}" alpha="0.2" weight="2" />
+			</s:stroke>
+		</s:Rect>
+
+		<!--
+		<s:Label id="text" fontSize="9" lineHeight="10" width="{count == -1?14:NaN}" textAlign="center" color="{color?color:0xFFFFFF}" fontWeight="bold" paddingLeft="4" paddingRight="4" paddingTop="3" paddingBottom="2" verticalCenter="0" horizontalCenter="0" text="{count == -1?'  ':(count > 100?'100+':count.toString())}" />
+		-->
+		<s:Label id="text" fontSize="9" lineHeight="10" width="{count == -1?14:NaN}" textAlign="center" color="{color?color:0xFFFFFF}" fontWeight="bold" paddingLeft="4" paddingRight="4" paddingTop="3" paddingBottom="2" verticalCenter="0" horizontalCenter="0" text="  " />
+	</s:Group>
+	
+</s:Group>

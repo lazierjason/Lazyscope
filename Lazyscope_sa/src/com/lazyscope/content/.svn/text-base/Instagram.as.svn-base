@@ -1,0 +1,61 @@
+package com.lazyfeed.content
+{
+	import com.lazyfeed.URL;
+	import com.lazyfeed.crawl.Crawler;
+	import com.lazyfeed.entry.BlogEntry;
+	
+	public class Instagram
+	{
+		public function Instagram()
+		{
+		}
+		
+		public static function fillContent(entry:BlogEntry):void
+		{
+			//entry.displayContent = entry.content;
+		}
+		
+		public static function readabilityEnabled(url:URL):Boolean
+		{
+			if (!url.path.match(/^\/p\//)) {
+				return true;
+			}
+			return false;
+		}
+		
+		public static function makeEntry(url:URL, callback:Function):void
+		{
+			if (!url.path.match(/^\/p\//)) {
+				if (callback != null) callback(null);
+				return;
+			}
+			
+			Crawler.downloadURL(url.urlOrig, function(u:String, html:String, httpStatus:Number):void {
+				if (!html || httpStatus != 200) {
+					if (callback != null) callback(null);
+					return;
+				}
+				var m:Array;
+				if (html && (m = html.match(/<img src="([^"]+)" class="photo"/))) {
+					var imageURL:String = m[1];
+					m = html.match(/<div class="profile-info">\s*<h1>([^\<]+)</);
+					var userName:String = m ? m[1] : '';
+					m = html.match(/<img src="([^"]+)" class="profile-photo"/);
+					var profileImageURL:String = m ? m[1] : '';
+					
+					var entry:BlogEntry = new BlogEntry;
+					entry.link = url.urlOrig;
+					entry.image = imageURL;
+					entry.title = userName+'\'s photo';
+					entry.content = '<a href="'+(entry.link)+'"><img src="'+imageURL+'" /></a><p><img src="'+profileImageURL+'" width="48" /> by '+userName+'</p>';
+					entry.description = '';
+					entry.source = 'web';
+					entry.service = 'Instagram';
+					if (callback != null) callback(entry);
+				}else{
+					if (callback != null) callback(null);
+				}				
+			});
+		}
+	}
+}

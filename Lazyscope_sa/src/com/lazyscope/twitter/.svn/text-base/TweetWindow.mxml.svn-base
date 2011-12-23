@@ -1,0 +1,1029 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Window xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  xmlns:mx="library://ns.adobe.com/flex/mx"
+		  xmlns:control="com.lazyfeed.control.*"
+		  xmlns:content="com.lazyfeed.content.*"
+		  showStatusBar="false"
+		  title="Post" close="window1_closeHandler(event)"
+		  minHeight="102" maxHeight="102" minWidth="470" width="470">
+	<fx:Script>
+		<![CDATA[
+			import com.lazyfeed.Base;
+			import com.lazyfeed.ConfigDB;
+			import com.lazyfeed.URL;
+			import com.lazyfeed.Util;
+			import com.lazyfeed.content.ContentSnapshot;
+			import com.lazyfeed.content.ContentSnapshotActivate;
+			import com.lazyfeed.content.ContentSnapshotSelector;
+			import com.lazyfeed.content.Twitpic;
+			import com.lazyfeed.control.Spinner;
+			import com.lazyfeed.crawl.FeedFuncRequest;
+			import com.lazyfeed.crawl.FeedFuncRequestEvent;
+			import com.lazyfeed.entry.BlogEntry;
+			import com.lazyfeed.entry.StreamEntry;
+			import com.swfjunkie.tweetr.data.objects.StatusData;
+			
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			import mx.graphics.ImageSnapshot;
+			import mx.managers.PopUpManager;
+			import mx.utils.URLUtil;
+			
+//			private const _snapUrlLength:Number = 19;
+			private const _snapUrlLength:Number = 26;
+			
+			[Bindable] public static var snapshotEnabled:Boolean = false;
+			public static var snapshotDone:Boolean = false;
+			public static var autoShorten:Boolean = true;
+			[Bindable] public var isDirectMessage:Boolean = false;
+
+			public var inReplyTo:String;
+			
+			public var snapshotCache:Object = new Object;
+			public var shortenCache:Object = new Object;
+			
+			private var globalSpinner:Spinner;
+			
+			public function init(text:String=null):void
+			{
+				addEventListener(KeyboardEvent.KEY_DOWN, onKeyDown, true, 0, true);
+				addEventListener(KeyboardEvent.KEY_UP, onKeyUp, true, 0, true);
+				
+				nativeWindow.x = Screen.mainScreen.visibleBounds.x;
+				nativeWindow.y = Screen.mainScreen.visibleBounds.y;
+				
+				snapshotContainer.removeAllElements();
+				attachList.removeAllElements();
+				
+				globalSpinner = new Spinner;
+				globalSpinner.horizontalCenter = 0;
+				globalSpinner.verticalCenter = 0;
+				globalSpinner.visible = false;
+				globalSpinner.scaleX = 3;
+				globalSpinner.scaleY = 3;
+				this.addElement(globalSpinner);
+				
+				profileImage.source = Base.topbar.twitterProfile.source;
+			}
+			
+			private var snapshotRequest:Number = 0;
+			public function getContent():void
+			{
+				if (isDirectMessage) {
+					dispatchEvent(new Event('getContent'));
+					return;
+				} 
+				
+				var text:String = tweet.text;
+				if (text == null || text.length <= 0) {
+					dispatchEvent(new Event('getContent'));
+					return;
+				}
+				
+				var i:Number;
+				var links:Array = getLinks(text);
+				var link:String;
+				if (links && links.length > 0) {
+					
+					for (i = 0; i < links.length; i++) {
+						link = links[i];
+						if (!link || existSnapshot(link)) continue;
+						if (excludeService(link)) continue;
+						
+						if (shortenCache[link]) {
+							link = shortenCache[link];
+							if (existSnapshot(link)) continue;
+							if (excludeService(link)) continue;
+						}
+						
+						addSpinner();
+						
+						snapshotRequest++;
+						
+						var req:FeedFuncRequest = new FeedFuncRequest(link, {link:link}, false);
+						req.addEventListener(FeedFuncRequestEvent.SUCCESS, getContentSuccess, false, 0, true);
+						req.addEventListener(FeedFuncRequestEvent.FAIL, getContentFail, false, 0, true);
+						req.run();
+					}
+				}
+				
+				if (snapshotRequest <= 0) {
+					dispatchEvent(new Event('getContent'));
+				}
+			}
+			
+			public function getContentSuccess(event:FeedFuncRequestEvent):void
+			{
+				snapshotRequest--;
+				removeSpinner();
+				if (event.req) {
+					event.req.removeEventListener(FeedFuncRequestEvent.SUCCESS, getContentSuccess);
+					event.req.removeEventListener(FeedFuncRequestEvent.FAIL, getContentFail);
+					event.req = null;
+				}
+				
+				if (snapshotRequest <= 0) {
+					setTimeout(function():void {
+						dispatchEvent(new Event('getContent'));
+					}, 10);
+				}
+
+				if (!event.userData) return;
+				
+				var origLink:String = event.userData.link;
+				event.userData = null;
+
+				var se:StreamEntry = StreamEntry.blog(event.entry);
+				
+				// to eliminate snapshot link
+				var host:String = URLUtil.getServerName(se.link);
+				if (host.match(/\btwitpic\.com$/) && se.description && se.description.match(/This preview was created using http:\/\/lazyscope\.com\/snap/)) {
+					var tm:String = tweet.text;
+					if (!tm) return;
+					
+					var u:String = ' '+origLink;
+					var p:Number = tm.indexOf(u);
+					if (p < 0) {
+						u = origLink;
+						p = tm.indexOf(u);
+					}
+					
+					if (p >= 0) {
+						var pActive:Number = tweet.selectionActivePosition ? tweet.selectionActivePosition : 0;
+						var pAnchor:Number = tweet.selectionAnchorPosition ? tweet.selectionAnchorPosition : 0;
+						tweet.text = tweet.text.substr(0, p) + tweet.text.substr(p + u.length);
+						tweet.selectRange(
+							pActive <= p ? pActive : (pActive >= p + u.length ? pActive - u.length : p),
+							pAnchor <= p ? pAnchor : (pAnchor >= p + u.length ? pAnchor - u.length : p)
+						);
+						verifyLink();
+					}
+					return;
+				}
+					
+					
+				
+				var snap:ContentSnapshot = addSnapshot(se);
+				snapshotCache[origLink] = snap;
+				if (origLink != se.link) {
+					snapshotCache[se.link] = snap;
+					shortenCache[origLink] = se.link;
+				}
+				tweet_changeHandler();
+			}
+			
+			public function getContentFail(event:FeedFuncRequestEvent):void
+			{
+				snapshotRequest--;
+				removeSpinner();
+				if (event.req) {
+					event.req.removeEventListener(FeedFuncRequestEvent.SUCCESS, getContentSuccess);
+					event.req.removeEventListener(FeedFuncRequestEvent.FAIL, getContentFail);
+					event.req = null;
+				}
+				
+				if (snapshotRequest <= 0) {
+					dispatchEvent(new Event('getContent'));
+				}
+			}
+			
+			public function addSpinner():void
+			{
+				var spinner:Spinner = new Spinner;
+				spinners.addElement(spinner);
+				spinner.start();
+			}
+
+			public function removeSpinner():void
+			{
+				if (spinners.numElements > 0) {
+					var sp:Spinner = Spinner(spinners.getElementAt(0));
+					spinners.removeElement(sp);
+					sp.stop();
+				}
+			}
+			
+			public function addSnapshot(e:BlogEntry=null):ContentSnapshot
+			{
+				if (!e || !e.link) return null;
+				if (excludeService(e.link)) return null;
+				if (existSnapshot(e.link)) return null;
+				
+				var snap:ContentSnapshot = new ContentSnapshot;
+				snapshotContainer.addElement(snap);
+				snap.show(e);
+				
+				var snapSelector:ContentSnapshotSelector = new ContentSnapshotSelector;
+				snapSelector.title.text = Util.htmlEntitiesDecode(e.title).replace(/\s+/g, ' ').replace(/^\s+/, '').replace(/\s+$/, '').replace(/<[^>]+>/g, '');
+				snapSelector.tweet_changeHandler = this.tweet_changeHandler;
+				if (forcedService(e.link))
+					snapSelector.ckbox.enabled = false;
+				attachList.addElement(snapSelector);
+				
+				snap.selector = snapSelector;
+				snapSelector.snap = snap;
+
+				
+				maxHeight = 10000;
+				height = Math.max(height, Math.min(Screen.mainScreen.visibleBounds.height - nativeWindow.y + Screen.mainScreen.visibleBounds.y, 500));
+				
+				return snap;
+			}
+			
+			public function forcedService(link:String):Boolean
+			{
+				var host:String = URLUtil.getServerName(link);
+				if (host.match(/\b(flickr|plixi|twitpic|yfrog|youtube)\.com$/)) return true;
+				if (host.match(/\b(instagr\.am)$/)) return true;
+				return false;
+			}
+			
+			public function excludeService(link:String):Boolean
+			{
+				var host:String = URLUtil.getServerName(link);
+				if (host.match(/\b(dailybooth|deviantart|etsy|kickstarter|vimeo|twitvid|twitgoo|rdio|dipdive)\.com$/)) return true;
+				if (host.match(/\b(justin\.tv|kiva\.org|ustream\.tv|photozou\.jp|blip\.tv|slideshare\.net)$/)) return true;
+				return false;
+			}
+			
+			public function verifyAll(callback:Function, noShorten:Boolean=false):void
+			{
+				var shortenFinished:Boolean = false;
+				var contentFinished:Boolean = false;
+				
+				var fs:Function = function(event:Event):void {
+					shortenFinished = true;
+					removeEventListener('doShorten', fs);
+					
+					if (contentFinished) {
+						callback();
+					}
+				};
+				
+				var fc:Function = function(event:Event):void {
+					contentFinished = true;
+					removeEventListener('getContent', fc);
+					
+					if (shortenFinished) {
+						callback();
+					}
+				};
+				
+				if (autoShorten && !noShorten) {
+					addEventListener('doShorten', fs);
+					doShorten();
+				}else
+					shortenFinished = true;
+					
+				addEventListener('getContent', fc);
+				getContent();
+			}
+			
+			private var verifyLinkTimer:uint;
+			public function verifyLink():void
+			{
+				clearTimeout(verifyLinkTimer);
+				
+				if (isDirectMessage) {
+					snapshotContainer.removeAllElements();
+					attachList.removeAllElements();
+					tweet_changeHandler();
+					return;
+				}
+				
+				verifyLinkTimer = setTimeout(_verifyLink, 50);
+			}
+			
+			public function _verifyLink():void
+			{
+				clearTimeout(verifyLinkTimer);
+				
+				var text:String = tweet.text;
+				if (text == null || text.length <= 0) {
+					snapshotContainer.removeAllElements();
+					attachList.removeAllElements();
+					tweet_changeHandler();
+					return;
+				}
+				
+				var i:Number;
+				var links:Array = getLinks(text);
+
+//				var pActive:Number = tweet.selectionActivePosition ? tweet.selectionActivePosition : 0;
+//				var pAnchor:Number = tweet.selectionAnchorPosition ? tweet.selectionAnchorPosition : 0;
+
+				if (!links || links.length <= 0) {
+					//tweet.selectRange(pActive, pAnchor);
+					snapshotContainer.removeAllElements();
+					attachList.removeAllElements();
+					tweet_changeHandler();
+					return;
+				}
+				
+//				var textTemp:String = text;
+				var idx:Number = 0;
+//				var replacedLinks:Array = new Array;
+//				var posTemp:Number;
+
+				var _tmpLink:String;
+				for (i = links.length; i--;) {
+//					posTemp = textTemp.indexOf(links[i]);
+//					if (posTemp >= 0) {
+//						if (posTemp < 5 || textTemp.substr(posTemp - 5, 5) != '@L^S#') {
+//							textTemp = textTemp.substr(0, posTemp) + '@L^S#' + (idx++) + '@L$S#' + textTemp.substr(posTemp + links[i].length);
+//							replacedLinks.push(links[i]);
+//						}
+//					}
+					
+					_tmpLink = shortenCache[links[i]];
+					if (_tmpLink) {
+						links.push(_tmpLink);
+						links.push(URL.normalize(_tmpLink));
+					}
+					links.push(URL.normalize(links[i]));
+				}
+				
+//				if (idx > 0) {
+//					var m:Array = textTemp.match(/@L\^S#\d+@L\$S#/g);
+//					if (m && m.length > 0) {
+//						var tempStr:String;
+//						for (i = 0; i < m.length; i++) {
+//							tempStr = String(m[i]);
+//							idx = Number(tempStr.substr(5, tempStr.length - 10));
+//							posTemp = textTemp.indexOf(tempStr);
+//							textTemp = textTemp.substr(0, posTemp) + '<a>' + replacedLinks[idx] + '</a>' + textTemp.substr(posTemp + tempStr.length);
+//						}
+////						tweet.textFlow = TextFlowUtil.importFromString('<p>'+textTemp+'</p>', 'preserve');
+////						tweet.selectRange(pActive, pAnchor);
+//					}
+//				}
+				
+				var snap:ContentSnapshot;
+				var flagEliminated:Boolean = false;
+				for (i = snapshotContainer.numElements; i--;) {
+					snap = snapshotContainer.getElementAt(i) as ContentSnapshot;
+					if (snap && links.indexOf(snap.data.link) < 0) {
+						if (snap.selector)
+							attachList.removeElement(snap.selector);
+						snapshotContainer.removeElement(snap);
+						flagEliminated = true;
+					}
+				}
+				tweet_changeHandler();
+				if (flagEliminated)
+					getContent();
+			}
+			
+			public function removeSnapshot(link:String):Boolean
+			{
+				var snap:ContentSnapshot;
+				for (var i:Number = snapshotContainer.numElements; i--;) {
+					snap = snapshotContainer.getElementAt(i) as ContentSnapshot;
+					if (snap && (snap.data.link == link || snap.data.link == shortenCache[link])) {
+						if (snap.selector)
+							attachList.removeElement(snap.selector);
+						snapshotContainer.removeElement(snap);
+						return true;
+					}
+				}
+				return false;
+			}
+			
+			public function existSnapshot(link:String):Boolean
+			{
+				var snap:ContentSnapshot;
+				for (var i:Number = snapshotContainer.numElements; i--;) {
+					snap = snapshotContainer.getElementAt(i) as ContentSnapshot;
+					if (snap && (snap.data.link == link || snap.data.link == shortenCache[link]))
+						return true;
+				}
+				return false;
+			}
+			
+			public static function post(text:String=null, inReplyTo:String=null, screenName:String=null, noShorten:Boolean=false, e:BlogEntry=null):void
+			{
+				var win:TweetWindow = new TweetWindow;
+				win.open();
+				win.init();
+				win._post(text, inReplyTo, screenName, noShorten);
+				
+//				win.getContent(text);
+//				win.addSnapshot(e ? e : null);
+			}
+			
+			public function _post(text:String=null, inReplyTo:String=null, screenName:String=null, noShorten:Boolean=false):void
+			{
+				this.inReplyTo = inReplyTo;
+				shortenSetting.text = 'Auto URL shortening: '+(autoShorten?'ON':'OFF');
+				
+				callLater(function():void {
+					var t:String = (screenName?screenName:'') + (text?text:'');
+					tweet.text = t;
+					tweet.selectRange(t.length, t.length);
+					
+					setDirectMessage();
+					
+					if (t) {
+						enabled = false;
+						getRidOfPreview(t);
+						verifyAll(function():void {
+							enabled = true;
+							tweet.setFocus();
+						}, noShorten);
+					}
+					/*
+					if (t && !noShorten) {
+						doShorten();
+					}
+					getContent();
+//					verifyLink();
+					*/
+					tweet.setFocus();
+				});
+			}
+			
+			public function setDirectMessage():void
+			{
+				isDirectMessage = (tweet && tweet.text && tweet.text.substr(0, 2) == 'd '); 
+			}
+
+			public function cbGetRidOfPreview(xml:XML):void
+			{
+				if (!xml || !xml.message) return;
+				var t:String = xml.message;
+				if (!t.match(/This preview was created using http:\/\/lazyscope\.com\/snap/)) return;
+
+				var tm:String = tweet.text;
+				if (!tm) return;
+				var u:String = ' http://twitpic.com/' + xml.short_id;
+				var p:Number = tm.indexOf(u);
+				if (p < 0) {
+					u = ' ' + u.substr(8);
+					p = tm.indexOf(u);
+				}
+					
+				if (p >= 0) {
+					var pActive:Number = tweet.selectionActivePosition ? tweet.selectionActivePosition : 0;
+					var pAnchor:Number = tweet.selectionAnchorPosition ? tweet.selectionAnchorPosition : 0;
+					tweet.text = tweet.text.substr(0, p) + tweet.text.substr(p + u.length);
+					tweet.selectRange(
+						pActive <= p ? pActive : (pActive >= p + u.length ? pActive - u.length : p),
+						pAnchor <= p ? pAnchor : (pAnchor >= p + u.length ? pAnchor - u.length : p)
+					);
+					verifyLink();
+				}
+				System.disposeXML(xml);
+			}
+			
+			public function getRidOfPreview(t:String):void
+			{
+				if (!t) return;
+				t = t.replace(/\bhttps?:\/\/[^\s]+([^\.,!?"'\)\>\s]|$)/ig, ' ');
+				var m:Array = t.match(/ twitpic\.com\/([a-z\d]{6})\b/ig);
+				if (!m || m.length <= 0) return;
+				var tpid:String, _t:String;
+				
+				for (var i:Number = 0; i < m.length; i++) {
+					_t = String(m[i]);
+					tpid = _t.substr(_t.length - 6);
+					
+					Twitpic.getXML(tpid, cbGetRidOfPreview);
+				}
+			}
+			
+			private function cntPreviewCharLength():Number
+			{
+				var cnt:Number = 0;
+				if (snapshotContainer && snapshotContainer.numElements > 0) {
+					var cs:ContentSnapshot;
+					for (var i:Number = 0; i < snapshotContainer.numElements; i++) {
+						cs = ContentSnapshot(snapshotContainer.getElementAt(i));
+						if (cs.isSelected && cs.selector && cs.selector.ckbox.enabled)
+							cnt++;
+					}
+				}
+				return cnt * _snapUrlLength;
+			}
+			
+			override public function set enabled(value:Boolean):void
+			{
+				super.enabled = value;
+				
+				if (tweet) {
+					if (value) {
+						stage.focus = tweet;
+						callLater(tweet.setFocus);
+					}
+				}
+				
+				if (globalSpinner) {
+					globalSpinner.visible = !value;
+					if (value)
+						globalSpinner.stop();
+					else
+						globalSpinner.start();
+				}
+			}
+			
+			private var _todoCount:Number = 0;
+			private var _twitpicLinkPairs:Object;
+			
+			public function getTwitpic(contentSnapshot:ContentSnapshot):void
+			{
+				var capturedImg:ImageSnapshot = ImageSnapshot.captureImage(contentSnapshot.preview)
+					
+				if (!capturedImg || !capturedImg.data) {
+					if (--_todoCount < 1) {
+						_postSubmit();
+					}
+					return;
+				}
+				
+				var tmpFname:String = File.createTempFile().url;
+				var fname:String = tmpFname+'.png';
+				
+				Util.writeContent(fname, capturedImg.data);
+				
+				
+				var func:Function = function(u:String):void {
+					try{
+						var _f:File = new File(tmpFname);
+						if (_f && _f.exists) _f.deleteFile();
+						_f = new File(fname);
+						if (_f && _f.exists) _f.deleteFile();
+					}catch(e:Error) {
+						trace(e.getStackTrace(), 'getTwitpic');
+					}
+					
+					if (u) {
+//						_twitpicLinkPairs[contentSnapshot.data.link] = u.replace(/^https?:\/\//, '');
+						_twitpicLinkPairs[contentSnapshot.data.link] = 'http://' + u.replace(/^https?:\/\//, '');
+//					}else{
+//						// Warning!!
+//						Util.showWarning('Sorry, something went wrong with Twitpic.\nPlease try again later.', 'Notice', tweetContainer);
+//						
+//						if (--_todoCount < 1)
+//							enabled = true;
+//
+//						return;
+					}
+					
+					if (--_todoCount < 1) {
+						_postSubmit();
+					}
+				};
+				
+				var msg:String = (contentSnapshot.blog.text ? ('via '+contentSnapshot.blog.text.replace(/^from\s+/i, '')+'\n') : '') + contentSnapshot.data.link + '\n\n* This preview was created using http://lazyscope.com/snap';
+				
+				var f:File = new File(fname);
+				Twitpic.uploadPhoto(Base.twitter.oauth, func, f, msg);
+			}
+			
+			public function postSubmit():void
+			{
+				enabled = false;
+				
+				if (tweet.text == null || tweet.text.length <= 0) {
+					Alert.show('', 'No message to send!', Alert.OK, this, function(event:CloseEvent):void {
+						enabled = true;
+					});
+					return;
+				}
+				
+				var len:Number = 140 - (tweet.text ? tweet.text.length : 0) - (snapshotEnabled ? cntPreviewCharLength() : 0);
+				if (len < 0) {
+					Alert.show('', 'Can not send: Message too long!', Alert.OK, this, function(event:CloseEvent):void {
+						enabled = true;
+					});
+					return;
+				}
+				
+				if (isDirectMessage) {
+					_messageSubmit();
+					return;
+				}
+				
+				var links:Array = getLinks(tweet.text);
+				if (links && links.length > 0) {
+					
+					var me:TweetWindow = this;
+					
+					verifyAll(function():void {
+						
+						
+						var len:Number = 140 - (tweet.text ? tweet.text.length : 0) - (snapshotEnabled ? cntPreviewCharLength() : 0);
+						if (len < 0) {
+							Alert.show('', 'Can not send: Message too long!', Alert.OK, me, function(event:CloseEvent):void {
+								enabled = true;
+							});
+							return;
+						}
+						
+						
+						
+						var i:Number;
+						var cs:ContentSnapshot;
+						var selectedSnapshots:Array = new Array;
+						
+						if (snapshotContainer.numElements > 0 && snapshotEnabled) {
+							for (i = 0; i < snapshotContainer.numElements; i++) {
+								cs = ContentSnapshot(snapshotContainer.getElementAt(i));
+								if (cs.isSelected && cs.selector && cs.selector.ckbox.enabled)
+									selectedSnapshots.push(cs);
+							}
+						}
+						
+						if (selectedSnapshots.length > 0 && snapshotEnabled) {
+							_twitpicLinkPairs = new Object;
+							_todoCount = selectedSnapshots.length;
+							for (i = 0; i < selectedSnapshots.length; i++) {
+								cs = ContentSnapshot(selectedSnapshots[i]);
+								getTwitpic(cs);
+							}
+						}else
+							_postSubmit();
+					});
+				}else{
+					_postSubmit();
+				}
+			}
+			
+			private function _postSubmit():void
+			{
+				var isSnapshoted:Boolean = false;
+				var text:String = tweet.text;
+				var links:Array = getLinks(text);
+				if (_twitpicLinkPairs && links && links.length > 0) {
+					var p:Number;
+					var l:String, l2:String;
+					for (var i:Number = 0; i < links.length; i++) {
+						l = String(links[i]);
+						l2 = _twitpicLinkPairs[l] ? l : shortenCache[l];
+						if (_twitpicLinkPairs[l2]) {
+							p = text.indexOf(l);
+							text = text.substr(0, p + l.length) + ' ' + _twitpicLinkPairs[l2] + text.substr(p + l.length);
+							isSnapshoted = true;
+						}
+					}
+				}
+				
+				text = Util.trim(text, true);
+				tweet.text = text;
+				
+				Twitter.session().updateStatus(function(ret:Array):void {
+					if (ret != null) {
+						enabled = true;
+						tweet.text='';
+						Base.twitterUpdater.tweet.addItem(ret[0]);
+						Base.stream.twitterStatusUpdated(ret[0]);
+						
+						if (isSnapshoted && !snapshotDone) {
+							if (ret && ret[0] && ret[0] is StatusData) {
+								ConfigDB.set('snapshotD'+(Base.twitter.userid), 't');
+								snapshotDone = true;
+								
+								var w:SnapshotCongrats = new SnapshotCongrats;
+								w.url = 'http://twitter.com/'+(Base.twitter.screenName);//+'/status/'+(StatusData(ret[0]).id);
+								PopUpManager.addPopUp(w, Base.app, true);
+								PopUpManager.centerPopUp(w);
+							}
+						}
+						
+						close();
+					}else{
+						Util.showWarning(null, null, tweetContainer, function(event:CloseEvent):void {
+							enabled = true;
+						});
+					}
+				}, text, inReplyTo);
+			}
+			
+			private function _messageSubmit():void
+			{
+				var text:String = Util.trim(tweet.text, true);
+				tweet.text = text;
+				
+				var m:Array = text.match(/^d\s+([^\s]+)\s+(.*)$/);
+				if (!m || !m[2]) {
+					Util.showWarning('Please enter a message.', '', tweetContainer, function(event:CloseEvent):void {
+						enabled = true;
+					});
+					return;
+				}
+				
+				Twitter.session().sendDirectMessage(function(ret:Array):void {
+					if (ret != null) {
+						enabled = true;
+						tweet.text='';
+//						Base.stream.twitterStatusUpdated(ret[0]);
+						close();
+					}else{
+						Util.showWarning('Can\'t send messages to users not following you.', '', tweetContainer, function(event:CloseEvent):void {
+							enabled = true;
+						});
+					}
+					
+				}, m[2], m[1]);
+			}
+			
+			private function onKeyDown(event:KeyboardEvent):void
+			{
+				tweet.setFocus();
+				if (enabled && event.keyCode == 13) {
+					event.preventDefault();
+					event.stopPropagation();
+					
+					tweet.text = tweet.text.replace(/\n+/g, ' ');
+					postSubmit();
+					return;
+				}
+			}
+			
+			private function onKeyUp(event:KeyboardEvent):void
+			{
+				setDirectMessage();
+				
+				tweet.setFocus();
+				switch (event.keyCode) {
+					case 32:	// spacebar
+//					case 13:	// enter
+					case 9:		// tab
+						if (autoShorten)
+							doShorten();
+						getContent();
+						break;
+				} 
+				verifyLink();
+			}
+			
+			private function onPaste():void
+			{
+				setDirectMessage();
+				
+				if (autoShorten)
+					doShorten();
+				getContent();
+				verifyLink();
+			}
+			
+			public function toggleShorten():void
+			{
+				autoShorten = !autoShorten;
+				
+				ConfigDB.set('lf_shorten_setting', autoShorten ? 'on' : 'off');
+				
+				shortenSetting.text = 'Auto URL shortening: '+(autoShorten?'ON':'OFF');
+				
+				if (autoShorten) doShorten();
+			}
+			
+			public var shortenRequested:Number = 0;
+			
+			public function doShorten():void
+			{
+				var text:String = tweet.text;
+				if (text == null || text.length <= 0) {
+					dispatchEvent(new Event('doShorten'));
+					return;
+				}
+				
+				var links:Array = getLinks(text);
+				if (links && links.length > 0) {
+					for (var i:Number = 0; i < links.length; i++) {
+						if (links[i] && links[i].length >= 30 && !links[i].match(/^http:\/\/bit\.ly\/[^\/]+$/) && !links[i].match(/^http:\/\/j\.mp\/[^\/]+$/))
+							requestShorten(links[i]);
+					}
+				}
+				
+				if (shortenRequested <= 0) {
+					dispatchEvent(new Event('doShorten'));
+				}
+			}
+			
+			public static function getLinks(text:String):Array
+			{
+				var links:Array=text.match(/\bhttps?:\/\/[^\s]+([^\.,!?"'\)\>\s]|$)/ig);
+				if (links && links.length > 0) {
+					var i:Number;
+					for (i = 0; i < links.length; i++)
+						links[i] = links[i].replace(/[\.,!?"'\)\>\s]+$/, '');
+					var linksCache:Object = new Object;
+					var linksFinal:Array = new Array;
+					for (i = 0; i < links.length; i++) {
+						if (!linksCache[links[i]]) {
+							linksCache[links[i]] = true;
+							linksFinal.push(links[i]);
+						}
+					}
+					return linksFinal;
+				}
+				return null;
+			}
+			
+			protected var bitlyAPI:Object = {
+				login:'noriguard',
+				apiKey:'R_9f08581499ee385fb926a9f6d1b92617',
+				//baseURL:'http://api.bit.ly/v3/shorten'
+				baseURL:'http://api.j.mp/v3/shorten'
+			};
+			
+			public function errorIO(event:ErrorEvent):void {}
+			public function errorSecurity(event:SecurityErrorEvent):void {}
+			
+			protected function requestShorten(longURL:String):void
+			{
+				if (!longURL) return;
+				
+				for (var key:String in shortenCache) {
+					if (shortenCache[key] == longURL)
+						replaceURL(longURL, key);
+				}
+				
+				var param:URLVariables = new URLVariables;
+				param['login'] = bitlyAPI.login;
+				param['apiKey'] = bitlyAPI.apiKey;
+				param['format'] = 'txt';
+				param['longUrl'] = longURL;
+				
+				shortenRequested++;
+				
+				var req:URLRequest = new URLRequest(bitlyAPI.baseURL + '?' + param.toString());
+				req.cacheResponse = true;
+				req.useCache = true;
+				
+				var loader:URLLoader = new URLLoader;
+				loader.addEventListener(IOErrorEvent.IO_ERROR, errorIO, false, 0, true);
+				loader.addEventListener(SecurityErrorEvent.SECURITY_ERROR, errorSecurity, false, 0, true);
+				loader.addEventListener(Event.COMPLETE, function(event:Event):void {
+					shortenRequested--;
+					if (shortenRequested <= 0) {
+						setTimeout(function():void {
+							dispatchEvent(new Event('doShorten'));
+						}, 10);
+					}
+					if (!loader.data) return;
+					var shortURL:String = loader.data.replace(/\s+/g, '');
+					shortenCache[shortURL] = longURL;
+					replaceURL(longURL, shortURL);
+				});
+				loader.load(req);
+			}
+			
+			protected function replaceURL(longURL:String, shortURL:String):void
+			{
+				if (!tweet.text) return;
+				var p:int = tweet.text.indexOf(longURL);
+				if (p >= 0) {
+					var pActive:Number = tweet.selectionActivePosition ? tweet.selectionActivePosition : 0;
+					var pAnchor:Number = tweet.selectionAnchorPosition ? tweet.selectionAnchorPosition : 0;
+					tweet.text = tweet.text.substr(0, p) + shortURL + tweet.text.substr(p + longURL.length);
+					tweet.selectRange(
+						pActive <= p ? pActive : (pActive >= p + longURL.length ? pActive - longURL.length + shortURL.length : p),
+						pAnchor <= p ? pAnchor : (pAnchor >= p + longURL.length ? pAnchor - longURL.length + shortURL.length : p + shortURL.length)
+					);
+					verifyLink();
+				}
+			}
+			
+			public function tweet_changeHandler(event:Event=null):void
+			{
+				var len:Number = 140 - (tweet.text ? tweet.text.length : 0) - (snapshotEnabled ? cntPreviewCharLength() : 0);
+				char_left.text = len.toString();
+				char_left.setStyle('color', len < 0?0xED1C24:0x444444);
+				
+				if (snapshotContainer.numElements <= 0 && height != 102) {
+					var nativeY:Number = nativeWindow.y;
+					height = 102;
+					validateNow();
+					maxHeight = 102;
+				} 
+			}
+			
+			public function charLeft():String
+			{
+				return (140 - (tweet.text.length) - (snapshotEnabled ? cntPreviewCharLength() : 0)).toString();
+			}
+
+			protected function window1_closeHandler(event:Event):void
+			{
+				Base.setFocus();
+			}
+
+		]]>
+	</fx:Script>
+	
+	<s:BorderContainer id="tweetContainer" backgroundColor="0xF1F1F1" width="100%" height="100" borderVisible="false" top="0">
+		<s:Group left="10" right="10" bottom="10" top="10">
+			<s:BorderContainer left="0" top="0" height="50" width="50" borderColor="0x9A9A9A">
+				<s:Image id="profileImage" height="48" width="48" left="0" top="0" />
+			</s:BorderContainer>
+			<s:TextArea id="tweet" maxChars="500" left="56" right="0" height="50" bottom="30" change="tweet_changeHandler(event)" borderColor="0x9A9A9A" paste="onPaste()" />
+			<s:Image width="13" height="9" source="button/message.png" visible="{isDirectMessage}" right="73" bottom="6" />
+			<s:Label id="char_left" color="0x444444" right="90" bottom="3" fontSize="14" fontWeight="bold" fontFamily="Verdana" text="{charLeft()}" />
+			<control:Btn id="btnShorten" skinClass="com.lazyfeed.control.BtnSkin" width="26" height="24" left="0" bottom="0" iconPrefix="shortlink" click="toggleShorten()" />
+			<s:Label id="shortenSetting" left="30" bottom="5" text="Auto URL shortening: ON" color="#999999" fontSize="12" />
+			<control:Btn id="btnPost" skinClass="com.lazyfeed.control.BtnSkin" width="67" height="24" right="0" bottom="0" iconPrefix="postsubmit" click="postSubmit()" />
+		</s:Group>
+	</s:BorderContainer>
+	
+	<s:BorderContainer id="attachContainer" backgroundColor="0xF1F1F1" width="100%" borderVisible="false" top="{tweetContainer.height}" minHeight="0" visible="{snapshotEnabled}" includeInLayout="{snapshotEnabled}">
+		<s:BorderContainer backgroundColor="0xEAEAEA" borderColor="0xE5E5E5" cornerRadius="5" left="10" right="10" bottom="10" top="0" minHeight="0">
+			<s:VGroup id="attachList" gap="0" width="100%" />
+		</s:BorderContainer>
+	</s:BorderContainer>
+	
+	<s:BorderContainer top="{tweetContainer.height+attachContainer.height}" bottom="12" width="100%" borderColor="0xF1F1F1" borderWeight="2">
+		<s:BorderContainer top="0" bottom="0" width="100%" borderColor="0xDDDDDD" borderWeight="1">
+			<s:Scroller width="100%" top="0" bottom="0">
+				<s:Group width="100%">
+					<s:BorderContainer width="449" borderVisible="false" horizontalCenter="0" left="50%">
+						<s:VGroup id="snapshotContainer" top="7" bottom="7" left="7" right="7" />
+					</s:BorderContainer>
+				</s:Group>
+			</s:Scroller>
+		</s:BorderContainer>
+	</s:BorderContainer>
+	
+	<s:BorderContainer bottom="0" height="12" width="100%" backgroundColor="0xF1F1F1" borderVisible="false">
+		<s:HGroup id="spinners" left="2" height="9" gap="5" clipAndEnableScrolling="true" />
+	</s:BorderContainer>
+
+	<s:Group width="100%" top="{tweetContainer.height+2}" bottom="0" visible="{!snapshotEnabled}" useHandCursor="true" mouseChildren="true" buttonMode="true" click="ContentSnapshotActivate.show(balloon)">
+		<s:Rect width="100%" height="100%" alpha="0.7">
+			<s:fill>
+				<s:SolidColor color="0x000000" />
+			</s:fill>
+		</s:Rect>
+		
+		<s:Label color="0xFFFFFF" textAlign="center" fontSize="42" horizontalCenter="0" verticalCenter="0" left="50%" top="50%" textDecoration="underline">
+			<s:text>Click to
+Unlock preview</s:text>
+		</s:Label>
+	</s:Group>
+
+	<s:Group right="10" top="{tweetContainer.height-10}" id="balloon" visible="false">
+		<s:Group width="100%" height="100%">
+			<s:Rect top="5" bottom="0" width="100%" alpha="0.8" radiusX="3" radiusY="3">
+				<s:fill>
+					<s:SolidColor color="0x44BA00" />
+				</s:fill>
+			</s:Rect>
+			<s:Rect top="0" height="1" width="1" right="32" alpha="0.8">
+				<s:fill>
+					<s:SolidColor color="0x44BA00" />
+				</s:fill>
+			</s:Rect>
+			<s:Rect top="1" height="1" width="2" right="32" alpha="0.8">
+				<s:fill>
+					<s:SolidColor color="0x44BA00" />
+				</s:fill>
+			</s:Rect>
+			<s:Rect top="2" height="1" width="3" right="32" alpha="0.8">
+				<s:fill>
+					<s:SolidColor color="0x44BA00" />
+				</s:fill>
+			</s:Rect>
+			<s:Rect top="3" height="1" width="4" right="32" alpha="0.8">
+				<s:fill>
+					<s:SolidColor color="0x44BA00" />
+				</s:fill>
+			</s:Rect>
+			<s:Rect top="4" height="1" width="5" right="32" alpha="0.8">
+				<s:fill>
+					<s:SolidColor color="0x44BA00" />
+				</s:fill>
+			</s:Rect>
+			
+			<s:filters>
+				<s:GlowFilter color="0xFFFFFF" strength="4" />
+			</s:filters>
+		</s:Group>
+		<s:Label color="0xFFFFFF" paddingBottom="6" paddingLeft="8" paddingRight="8" paddingTop="15" fontFamily="Arial" fontWeight="bold">
+			<s:text>Unlocked!
+Now try posting by pressing
+the Post button.</s:text>
+			<s:filters>
+				<s:GlowFilter color="0x225504" />
+			</s:filters>
+		</s:Label>
+		
+		<s:Group width="10" height="10" top="9" right="4" useHandCursor="true" buttonMode="true" click="balloon.visible=false">
+			<s:Rect width="10" height="10" radiusX="2">
+				<s:fill>
+					<s:SolidColor color="0xFFFFFF" />
+				</s:fill>
+			</s:Rect>
+			<s:Line xFrom="2" xTo="8" yFrom="2" yTo="8">
+				<s:stroke>
+					<s:SolidColorStroke color="0x44BA00" />
+				</s:stroke>
+			</s:Line>
+			<s:Line xFrom="8" xTo="2" yFrom="2" yTo="8">
+				<s:stroke>
+					<s:SolidColorStroke color="0x44BA00" />
+				</s:stroke>
+			</s:Line>
+		</s:Group>
+	</s:Group>
+</s:Window>

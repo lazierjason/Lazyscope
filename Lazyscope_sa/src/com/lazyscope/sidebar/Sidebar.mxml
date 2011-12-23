@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx" xmlns:sidebar="com.lazyscope.sidebar.*" xmlns:lazyscope="com.lazyscope.*" xmlns:control="com.lazyscope.control.*"
+		 width="160" backgroundColor="0xE4E4DA" borderVisible="false" creationComplete="onCreationComplete(event)" mouseChildren="true">
+
+	<fx:Declarations>
+		<fx:String id="profileImage" />
+		<fx:String id="twitterScreenName" />
+		<sidebar:SiteList id="siteList" />
+		<sidebar:TwitterList id="twitterList" />
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			import com.lazyscope.ConfigDB;
+			import com.lazyscope.account.AccountTwitter;
+			import com.lazyscope.account.AccountTwitterEvent;
+			import com.lazyscope.toolbar.SubscribeWindow;
+			import com.lazyscope.twitter.TwitterStreamEvent;
+			
+			import mx.collections.ArrayList;
+			import mx.events.FlexEvent;
+			
+			import spark.components.List;
+			
+			public var accounts:Object = {};
+			[Bindable] private var enabledBookmarkletMsg:Boolean = true;
+			
+			public function addSites(items:ArrayList):void
+			{
+				siteList.data.addAll(items);
+			}
+			
+			public function addSite(item:Object, uniq:Boolean=true):void
+			{
+				if (uniq) {
+					for (var i:Number=siteList.data.length; i--;) {
+						var o:Object = siteList.data.getItemAt(i);
+						try{
+							if (o && o['data'] && item['data']) {
+								if (o['data']['feedlink'] && item['data']['feedlink'] && o['data']['feedlink'] == item['data']['feedlink'])
+									siteList.data.removeItemAt(i);
+								else if (o['data']['link'] && item['data']['link'] && o['data']['link'] == item['data']['link'])
+									siteList.data.removeItemAt(i);
+							}
+						}catch(err:*) {}
+					}
+				}
+				
+				siteList.data.addItem(item);
+			}
+			
+			public function removeSite(feedLink:String):void
+			{
+				siteList.data.removeSearchedItems('feedlink', feedLink);
+			}
+			
+			public function clearAll():void
+			{
+				siteList.data.removeAll();
+				twitterList.data.removeAll();
+				
+				alertNotificationClear();
+				alertMessageClear();
+			}
+			
+			public function alertNotificationClear():void
+			{
+				Base.topbar.btnMentionsCnt.count = 0;
+//				notification.alert = 0;
+			}
+			
+			public function alertNotification(_tmp:Object=null):void
+			{
+				if (Base.filterType == 8) return;
+				Base.topbar.btnMentionsCnt.count = -1;
+//				notification.alert = -1;
+			}
+			
+			public function alertMessageClear():void
+			{
+				Base.topbar.btnMessagesCnt.count = 0;
+//				message.alert = 0;
+			}
+			
+//			public function alertMessage(_tmp:Object=null):void
+			public function alertMessage(e:TwitterStreamEvent=null):void
+			{
+				if (Base.filterType == 9) return;
+				
+				if (e.directMessageData.senderId == Number(Base.twitter.userid)) return;	// no alert for the DM from me
+				
+				Base.topbar.btnMessagesCnt.count = -1;
+//				message.alert = -1;
+			}
+			
+			public function alertFavoriteClear():void
+			{
+				Base.topbar.btnFavoritesCnt.count = 0;
+			}
+			
+			public function alertFavorite(_tmp:Object=null):void
+			{
+				if (Base.filterType == 10) return;
+				
+				Base.topbar.btnFavoritesCnt.count = -1;
+			}
+			
+			public function twitterComplete():void
+			{
+				//TODO:
+				if (!accounts.twitter)
+					accounts.twitter = [];
+				
+				twitterScreenName = Base.twitter.screenName;
+				
+				var account:AccountTwitter = new AccountTwitter(Base.twitter);
+				account.addEventListener(AccountTwitterEvent.LISTS, function(e:AccountTwitterEvent):void {
+					twitterList.data.addItem(e.data);
+				});
+				account.getLists();
+				
+				stream.accountList.add(account);
+				
+				list.expanding = true;
+				
+//				Base.topbar.twitterProfile.source = 'http://api.twitter.com/1/users/profile_image/'+(Base.twitter.userid)+'.json?size=normal';
+				Base.topbar.twitterProfile.source = 'http://api.twitter.com/1/users/profile_image/'+(Base.twitter.screenName)+'.json?size=normal';
+			}
+			
+			public function twitterCancel():void
+			{
+				stream.accountList.remove('Twitter');
+				clearAll();
+				
+				Base.topbar.twitterProfile.source = null;
+			}
+
+			public var selected:Object;
+			protected var selectedItem:Object;
+			protected function onSelect(event:SidebarEvent):void
+			{
+				if (!Base.stream || !Base.ready) return;
+				if (selected == event.firedTarget && selected is SidebarGroup)
+					return;
+
+				if (selected is SidebarGroup) {
+					selected.selected = false;
+				}else if (selected is List) {
+					if (event.firedTarget == selected) {
+						if (selectedItem == selected.selectedItem)
+							return;
+					}else
+						List(selected).selectedIndex = -1;
+				}
+					
+				selected = event.firedTarget;
+				
+				switch (selected.id) {
+					case 'stream':
+						Base.filterType = 1;
+						break;
+//					case 'message':
+//						Base.filterType = 9;
+//						break;
+//					case 'notification':
+//						Base.filterType = 8;
+//						break;
+					case 'list':
+						return;
+						break;
+					default:
+						selected.setFilter();
+						selectedItem = selected.selectedItem;
+						break;
+				}
+				Base.stream.selectorChanged();
+				Base.topbar.btnMentions.selected = Base.topbar.btnMessages.selected = Base.topbar.btnFavorites.selected = false;
+			}
+
+			protected function onCreationComplete(event:FlexEvent):void
+			{
+				Base.twitterUpdater.addEventListener(TwitterStreamEvent.DIRECT_MESSAGE, alertMessage);
+				Base.twitterUpdater.addEventListener(TwitterStreamEvent.MENTION, alertNotification);
+				Base.twitterUpdater.addEventListener(TwitterStreamEvent.FAVORITE, alertFavorite);
+				
+				enabledBookmarkletMsg = ConfigDB.get('lf_bookmarkletMsg') == 'f' ? false : true;
+				if (enabledBookmarkletMsg)
+					btnBookmarkletClose.addEventListener(MouseEvent.CLICK, closeBookmarketlet, false, 10);
+				
+				stream.selected = true;
+				
+				selected = stream;
+				stream.child = siteList;
+				
+				list.child = twitterList;
+				
+				scroller.addEventListener(MouseEvent.MOUSE_WHEEL, function(event:MouseEvent):void {
+					event.preventDefault();
+					if (event.delta == 0) return;
+					var d:Number = event.delta;
+					if (d > 0 && d > 3) d = 3;
+					else if (d < 0 && d < -3) d = -3;
+					scroller.viewport.verticalScrollPosition -= d * 15;
+				}, true, 100);
+			}
+			
+			protected function onClickSignOut(e:Event=null):void
+			{
+				if (Base.ready) {
+					Base.twitter.disconnect();
+					callLater(Base.twitter.authorize);
+				}else{
+					Base.twitter.authorize();
+				}
+			}
+			
+			public function showHome():void
+			{
+				onSelect(new SidebarEvent(SidebarEvent.SELECT, stream));
+				stream.selected = true;
+			}
+			
+			public function getBookmarketlet():void
+			{
+				if (!Base.twitter.ready || !Base.twitter.userid) return;
+				Base.navigateInBrowser('http://www.lazyscope.com/bookmarklet.php?u='+Base.twitter.userid);
+			}
+			
+			private function closeBookmarketlet(e:MouseEvent):void
+			{
+				enabledBookmarkletMsg = false;
+				ConfigDB.set('lf_bookmarkletMsg', 'f');
+				btnBookmarkletClose.removeEventListener(MouseEvent.CLICK, closeBookmarketlet);
+				e.stopPropagation();
+			}
+		]]>
+	</fx:Script>
+
+	<s:Rect width="0" height="100%" right="0">
+		<s:stroke>
+			<s:SolidColorStroke color="0xBEC4CB" />
+		</s:stroke>
+	</s:Rect>
+
+	<s:Scroller id="scroller" left="0" right="1" height="100%">
+	<!--
+	<s:HGroup width="240" paddingLeft="10" paddingTop="10" verticalAlign="middle">
+		<s:Group id="image" width="26" height="26" useHandCursor="true">
+			<s:filters>
+				<s:DropShadowFilter distance="1" blurX="2" angle="90" alpha="0.75" />
+			</s:filters>
+			<s:Group width="26" height="26">
+				<s:Image id="twitterProfile" width="22" height="22" left="2" top="2" source="{profileImage?profileImage:null}" />
+				<s:Rect width="25" height="25">
+					<s:stroke>
+						<s:SolidColorStroke id="profileFrame" color="0x92908E" weight="3" />
+					</s:stroke>
+				</s:Rect>
+				<s:mask>
+					<s:Graphic>
+						<s:Rect width="26" height="26" radiusX="2">
+							<s:fill>
+								<s:SolidColor color="0xFFFFFF" />
+							</s:fill>
+						</s:Rect>
+					</s:Graphic>
+				</s:mask>
+			</s:Group>
+		</s:Group>
+		
+		<control:Btn id="btnPost" skinClass="com.lazyscope.control.BtnSkin" width="26" height="24" iconPrefix="post" click="TweetWindow.post()" toolTip=" Post " />
+		<control:Btn id="btnSubscribe" skinClass="com.lazyscope.control.BtnSkin" width="26" height="24" iconPrefix="addfeed" click="SubscribeWindow.show();" toolTip=" Add a subscription " />
+		<control:Btn id="btnSetting" skinClass="com.lazyscope.control.BtnSkin" width="26" height="24" iconPrefix="settings" click="PreferenceWindow.show();" toolTip=" Preferences " />
+		
+		<s:Label text="Sign out" click="onClickSignOut(event)" useHandCursor="true" mouseEnabled="true" buttonMode="true" />
+	</s:HGroup>
+	
+	<mx:Spacer height="20" />
+	-->
+
+		<s:VGroup width="100%" clipAndEnableScrolling="true" gap="5">
+			<!--
+			<sidebar:SidebarGroup id="stream" title="Home" includeAccounts="{twitterScreenName}" expandable="true" icon="app:///icon/twitter.png" select="onSelect(event)" />
+			-->
+			<!-- <sidebar:SidebarGroup id="stream" title="Home" includeAccounts="{twitterScreenName}" select="onSelect(event)" button="btn_subscribe" buttonClick="SubscribeWindow.show()" buttonWidth="16" buttonHeight="16" buttonTooltip="Add a subscription" /> -->
+			<sidebar:SidebarGroup id="stream" title="Home" includeAccounts="{twitterScreenName}" select="onSelect(event)" />
+			<!--
+			<sidebar:SidebarGroup id="message" title="Messages" icon="app:///icon/mail.png" select="onSelect(event)" />
+			<sidebar:SidebarGroup id="notification" title="Notifications" icon="app:///icon/notification.png" select="onSelect(event)" />
+			-->
+			<sidebar:SidebarGroup id="list" title="Lists" select="onSelect(event)" selectable="false" />
+			
+			<mx:Spacer height="25" visible="{enabledBookmarkletMsg}" includeInLayout="{enabledBookmarkletMsg}" />
+			
+			<s:Group width="100%" visible="false" includeInLayout="false">
+				<s:BorderContainer id="btnBookmarklet" visible="{enabledBookmarkletMsg}" includeInLayout="{enabledBookmarkletMsg}" width="125" click="getBookmarketlet()" height="62" horizontalCenter="0" left="50%" top="0" borderColor="0xCCCCCC" backgroundColor="0xCED4DB" rollOver="btnBookmarklet.setStyle('backgroundColor', 0xFEFFF0); btnBookmarkletClose.visible = true" rollOut="btnBookmarklet.setStyle('backgroundColor', 0xCED4DB); btnBookmarkletClose.visible = false" buttonMode="true" mouseChildren="true" useHandCursor="true" minHeight="NaN">
+					<s:Label width="115" fontSize="12" left="10" right="10" top="10" color="0x333677" textAlign="center" lineHeight="15">
+						<s:text><![CDATA[Click to connect
+your browser
+with Lazyscope.]]></s:text>
+					</s:Label>
+					
+					<s:Graphic id="btnBookmarkletClose" width="10" height="10" top="2" right="1" visible="false" alpha="0.5" rollOver="btnBookmarkletClose.alpha=1.0" rollOut="btnBookmarkletClose.alpha=0.5" buttonMode="true" useHandCursor="true" mouseChildren="true">
+						<s:Ellipse width="10" height="10">
+							<s:fill>
+								<s:SolidColor color="0xBBBBBB" />
+							</s:fill>
+							<s:stroke>
+								<s:SolidColorStroke weight="2" color="0xA0A0A0" />
+							</s:stroke>
+						</s:Ellipse>
+						<s:Line xFrom="2" xTo="8" yFrom="2" yTo="8">
+							<s:stroke>
+								<s:SolidColorStroke weight="2" color="0x666666" />
+							</s:stroke>
+						</s:Line>
+						<s:Line xFrom="2" xTo="8" yFrom="8" yTo="2">
+							<s:stroke>
+								<s:SolidColorStroke weight="2" color="0x666666" />
+							</s:stroke>
+						</s:Line>
+					</s:Graphic>
+					
+				</s:BorderContainer>
+				
+			</s:Group>
+			
+			<mx:Spacer height="10" />
+			
+			<!--
+			<mx:Spacer height="30" />
+			<lazyscope:MemoryCheck />
+			-->
+		</s:VGroup>
+		
+	</s:Scroller>
+	
+</s:BorderContainer>

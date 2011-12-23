@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:ItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009"
+				xmlns:s="library://ns.adobe.com/flex/spark"
+				xmlns:mx="library://ns.adobe.com/flex/mx"
+				autoDrawBackground="true" width="100%" rollOver="button.visible=true; wrap.setStyle('backgroundAlpha', 0)" rollOut="button.visible=false">
+<!--
+	<s:layout>
+		<s:HorizontalLayout verticalAlign="middle" />
+	</s:layout>
+-->
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			import com.lazyscope.Util;
+			import com.lazyscope.crawl.Feed;
+			import com.lazyscope.entry.Blog;
+			
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			override public function set data(value:Object):void
+			{
+				if (super.data == value) return;
+				
+				super.data = value;
+				if (!value) return;
+				
+				if (value.isNew) {
+					value.isNew = false;
+					wrap.setStyle('backgroundAlpha', 1)
+				}
+				
+				title.text = data.name;
+				toolTip = data.name+(data.data && data.data is Blog && data.data.link?'\n'+data.data.link:'');
+			}
+			
+			public function unsubscribe(event:MouseEvent):void
+			{
+				if (!data || !data.feedlink) return;
+				event.stopPropagation();
+				event.preventDefault();
+				
+				_unsubscribe(data.data);
+			}
+
+			private static function _unsubscribe(data:Blog):void
+			{
+				Util.isShowingAlert = true;
+				Alert.show('Unsubscribe from\n"'+(data.title)+'"?', 'Unsubscribe', Alert.YES | Alert.NO, Base.app, function(event:CloseEvent):void{
+					if (event.detail == Alert.YES)
+						Base.feed.unsubscribe(data);
+					Util.isShowingAlert = false;
+				}, null, Alert.YES);
+			}
+		]]>
+	</fx:Script>
+	
+	<s:BorderContainer id="wrap" width="100%" height="25" backgroundColor="0xF5F2AA" backgroundAlpha="0" borderVisible="false">
+		<s:layout>
+			<s:HorizontalLayout verticalAlign="middle" paddingRight="3" />
+		</s:layout>
+		
+		<s:Label id="title" fontSize="11" color="0x333333" paddingTop="7" paddingBottom="7" paddingLeft="15" width="100%" maxDisplayedLines="1" />
+		
+		<s:Group id="button" width="13" height="13" useHandCursor="true" buttonMode="true" mouseChildren="true" toolTip="Unsubscribe" mouseDown="unsubscribe(event)" visible="false">
+			<s:Rect width="13" height="13">
+				<s:fill>
+					<s:SolidColor color="0xFFFFFF" />
+				</s:fill>
+				<s:stroke>
+					<s:SolidColorStroke color="0xBBBBBB" />
+				</s:stroke>
+			</s:Rect>
+			<s:Line y="7" xFrom="4" xTo="10">
+				<s:stroke>
+					<s:SolidColorStroke color="0x888888" weight="2" />
+				</s:stroke>
+			</s:Line>
+		</s:Group>
+	</s:BorderContainer>
+</s:ItemRenderer>

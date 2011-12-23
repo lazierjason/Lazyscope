@@ -1,0 +1,342 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+				   xmlns:s="library://ns.adobe.com/flex/spark" 
+				   xmlns:mx="library://ns.adobe.com/flex/mx"
+				   xmlns:control="com.lazyscope.control.*"
+				   creationComplete="onCreationComplete()"
+				   >
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			import com.lazyscope.Util;
+			import com.lazyscope.entry.StreamEntry;
+			import com.lazyscope.stream.TweetRendererTwitterInUserInfo;
+			import com.swfjunkie.tweetr.data.objects.StatusData;
+			import com.swfjunkie.tweetr.data.objects.UserData;
+			
+			public var userID:String = null;
+			public var userName:String = null;
+			[Bindable] public var isDoing:Boolean = false;
+			[Bindable] public var followingStatus:String = null;
+			[Bindable] public var verifiedUser:Boolean = false;
+			[Bindable] public var protectedUser:Boolean = false;
+			
+			public function onCreationComplete():void
+			{
+				scroller.addEventListener(MouseEvent.MOUSE_WHEEL, function(event:MouseEvent):void {
+					event.preventDefault();
+					if (event.delta == 0) return;
+					var d:Number = event.delta;
+					if (d > 0 && d > 3) d = 3;
+					else if (d < 0 && d < -3) d = -3;
+					scroller.viewport.verticalScrollPosition -= d * 15;
+				}, true, 100);
+			}
+			
+			public function init():void
+			{
+				clearCanvas();
+			}
+			
+			public function clearCanvas():void
+			{
+				tweets.removeAllElements();
+				scroller.viewport.verticalScrollPosition = 0;
+				noContentMsg.visible = false;
+			}
+			
+			public function showError():void
+			{
+				isDoing = false;
+				streamLoading.stop();
+				hide();
+
+				Util.showWarning();
+			}
+			
+			public function showErrorFollow(toFollow:Boolean=true):void
+			{
+				Util.showWarning('Sorry, something went wrong with Twitter.\nPlease try again later.');
+			}
+			
+			public function displayUser(userName:String):void
+			{
+				if (!userName) return;
+				if (isDoing) return;
+				isDoing = true;
+				this.userName = userName;
+				streamLoading.start();
+				init();
+				Base.twitter.getUserTimeLine(displayUserCallback, userName, null, null, null, 0, 20, true);
+				show();
+			}
+			
+			public function displayUserCallback(arr:Array):void
+			{
+				if (arr && arr.length > 0) {
+					var st:StatusData = null;
+					var user:UserData = null;
+					for (var i:Number=0; i < arr.length; i++) {
+						st = arr[i] as StatusData;
+						if (user == null && st.user != null)
+							user = st.user;
+						showTweet(st);
+					}
+					if (user == null) {
+						//ERROR!!!
+						showError();
+					}
+					showUserInfo(user);
+				}else{
+					// for protected user!!! use another API (/users/show);
+
+					Base.twitter.getUserDetails(function(ret:Array):void {
+						if (ret && ret.length > 0) {
+							showUserInfo(ret[0]);
+							isDoing = false;
+							streamLoading.stop();
+						}else{
+							//ERROR!!!
+							showError();
+						}
+						
+						noContentMsg.visible = true;
+						
+					}, userName);
+					
+					return;
+				}
+				
+				isDoing = false;
+				streamLoading.stop();
+			}
+			
+			public function show():void
+			{
+				Base.tweetViewer.hide();
+				visible = true;
+			}
+
+			public function hide():void
+			{
+				visible = false;
+			}
+			
+			public function showUserInfo(user:UserData):void
+			{
+				userID = user.id;
+
+				if (!userID || !Base.twitter.userid) return;
+				
+				verifiedUser = user.extended.verified;
+				protectedUser = user.profileProtected;
+				
+				var profileURL:String = user.profileImageUrl.replace(/_normal\./, '_bigger.');
+				profileImage.source = profileURL;
+				
+				realName.text = user.name;
+				screenName.text = user.screenName;
+				
+				statTweets.text = Util.int2str(user.extended.statusesCount);
+				statFollowing.text = Util.int2str(user.extended.friendsCount);
+				statFollowers.text = Util.int2str(user.followersCount);
+				statListed.text = Util.int2str(user.extended.listedCount);
+
+				if (!Base.twitterUpdater.isFriendSet/* || !protectedUser*/) {
+					followingStatus = null;
+					if (userID != Base.twitter.userid) {
+						Base.twitter.showFriendshipByID(function(ret:Array):void{
+							if (ret && ret.length > 1)
+								followingStatus = ret[0]['following'] ? 'T' : 'F';
+						}, userID, Base.twitter.userid);
+					}
+				}else{
+					if (Base.twitterUpdater.isFriend(userID)) {
+						if (userID == Base.twitter.userid)
+							followingStatus = null;
+						else
+							followingStatus = 'T';
+					}else{
+						followingStatus = 'F';
+					}
+				}
+				
+				if (user.description) {
+					bioDescription.text = user.description;
+					bioDescription.visible = bioDescription.includeInLayout = true;
+				}else{
+					bioDescription.text = '';
+					bioDescription.visible = bioDescription.includeInLayout = false;
+				}
+				
+				if (user.location) {
+					userLocation.text = user.location;
+					userLocation.visible = userLocation.includeInLayout = true;
+				}else{
+					userLocation.text = '';
+					userLocation.visible = userLocation.includeInLayout = false;
+				}
+
+				if (user.url) {
+					userURL.text = user.url;
+					userURL.visible = userURL.includeInLayout = true;
+				}else{
+					userURL.text = '';
+					userURL.visible = userURL.includeInLayout = false;
+				}
+			}
+
+			public function showTweet(st:StatusData):void
+			{
+				var tweet:TweetRendererTwitterInUserInfo = new TweetRendererTwitterInUserInfo;
+				tweet.data = StreamEntry.twitter(st);
+				tweet.percentWidth=100;
+				tweets.addElement(tweet);
+			}
+			
+			private function onCloseClick(event:MouseEvent=null):void
+			{
+				hide();
+			}
+			
+			private function followUser():void
+			{
+				if (!userID) return;
+				Base.twitter.createFriendship(userID, _followUser);
+			}
+			
+			private function unfollowUser():void
+			{
+				if (!userID) return; 
+				Base.twitter.destroyFriendship(userID, _unfollowUser);
+			}
+			
+			private function _followUser(ret:Array):void
+			{
+				if (ret && ret.length > 0) {	// success
+					if (ret[0]['id'] == userID)
+						followingStatus = 'T';
+					if (ret[0]['id'] && Base.twitterUpdater.friend.getItemIndex(ret[0]['id']) < 0) {
+						Base.twitterUpdater.friend.addItem(ret[0]['id']);
+					}
+				}else{		// Fail!
+					showErrorFollow(true);
+				}
+			}
+			
+			private function _unfollowUser(ret:Array):void
+			{
+				if (ret && ret.length > 0) {	// success
+					if (ret[0]['id'] == userID)
+						followingStatus = 'F';
+					if (ret[0]['id'] && Base.twitterUpdater.friend.getItemIndex(ret[0]['id']) >= 0) {
+						Base.twitterUpdater.friend.removeItem(ret[0]['id']);
+					}
+				}else{		// Fail!
+					showErrorFollow(false);
+				}
+			}
+			
+			private function onOverFollowing():void
+			{
+				btnFollowingLabel.text='Following';
+				btnFollowingLabel.setStyle('color', 0x303A34);
+				btnFollowing.setStyle('backgroundColor', 0xE0EAE4);
+				btnFollowing.setStyle('borderColor', 0xD9D9CD);
+			}
+			
+			private function onOutFollowing():void
+			{
+				btnFollowingLabel.text='Unfollow';
+				btnFollowingLabel.setStyle('color', 0x772222);
+				btnFollowing.setStyle('backgroundColor', 0xF0D9D9);
+				btnFollowing.setStyle('borderColor', 0xD0C0BA);
+			}
+		]]>
+	</fx:Script>
+	
+	<s:BorderContainer borderVisible="false" backgroundColor="0x000000" backgroundAlpha="0.4" left="0" right="0" top="0" bottom="0" />
+	<s:BorderContainer borderColor="0xD9D9CD" borderWeight="1" backgroundColor="0xE4E4DA" left="10" right="10" top="10" bottom="10">
+		<s:VGroup id="userInfoContainer" top="5" left="5" right="5">
+			<s:HGroup width="100%" gap="8">
+				<s:VGroup width="73" gap="8">
+					<s:Image id="profileImage" width="73" height="73" click="Base.navigateInBrowser('http://twitter.com/'+screenName.text)" mouseChildren="true" buttonMode="true" useHandCursor="true" />
+					<s:Button label="Follow" visible="{followingStatus=='F'}" includeInLayout="{followingStatus=='F'}" width="73" height="20" fontSize="11" click="followUser()" />
+					<!--
+					<s:Button id="btnFollowing" label="Following" visible="{followingStatus=='T'}" includeInLayout="{followingStatus=='T'}" width="73" height="20" fontSize="11" rollOut="btnFollowing.label='Following'" rollOver="btnFollowing.label='Unfollow'" click="unfollowUser()" />
+					-->
+					<s:BorderContainer id="btnFollowing" visible="{followingStatus=='T'}" includeInLayout="{followingStatus=='T'}" width="73" height="20" borderColor="0xD9D9CD" backgroundColor="0xE0EAE4" cornerRadius="2" rollOut="onOverFollowing()" rollOver="onOutFollowing()" click="unfollowUser()" buttonMode="true" mouseChildren="true" useHandCursor="true">
+						<s:Label id="btnFollowingLabel" text="Following" fontSize="11" horizontalCenter="0" left="0" verticalCenter="0" top="50%" color="0x303A34" />
+					</s:BorderContainer>
+				</s:VGroup>
+				<s:VGroup width="100%" clipAndEnableScrolling="true" gap="4">
+					<s:HGroup gap="4" width="100%">
+						<s:Group visible="{protectedUser}" includeInLayout="{protectedUser}" width="8" height="23">
+							<s:Image source="img/icon_protected_8x10.png" width="8" height="10" top="5" left="0" />
+						</s:Group>
+						<s:Label id="realName" fontSize="18" color="0x444444" fontWeight="bold" height="23" lineHeight="19" paddingTop="5" lineBreak="explicit" />
+						<s:Image visible="{verifiedUser}" includeInLayout="{verifiedUser}" source="img/icon_verified_23x23.png" width="23" height="23" />
+					</s:HGroup>
+					<s:HGroup width="100%" gap="2">
+						<s:Label fontSize="15" color="0x444455" height="15" lineHeight="16" text="@" />
+						<s:Label id="screenName" fontSize="15" color="0x444455" height="15" lineHeight="16" lineBreak="explicit" click="Base.navigateInBrowser('http://twitter.com/'+screenName.text)" mouseChildren="true" buttonMode="true" useHandCursor="true" rollOut="screenName.setStyle('color', 0x444455)" rollOver="screenName.setStyle('color', 0x0279B4)" />
+					</s:HGroup>
+					<s:Label id="userLocation" fontSize="12" color="0x666666" lineHeight="13" width="100%" visible="false" includeInLayout="false" />
+					<s:Label id="bioDescription" fontSize="11" color="0x7777777" lineHeight="12" width="100%" visible="false" includeInLayout="false" />
+					<s:Label id="userURL" fontSize="11" color="0x0279B4" lineHeight="12" width="100%" visible="false" includeInLayout="false" click="Base.navigateInBrowser(userURL.text)" mouseChildren="true" buttonMode="true" useHandCursor="true" />
+					<s:HGroup gap="4" width="100%">
+						<s:BorderContainer width="62" height="30" borderColor="0xD9D9CD" backgroundColor="0xF0F0EC" cornerRadius="3">
+							<s:Label id="statTweets" left="50%" horizontalCenter="0" color="0x445066" fontSize="11" lineHeight="12" top="4" fontWeight="bold" />
+							<s:Label text="Tweets" left="50%" horizontalCenter="0" color="0x777070" fontSize="10" lineHeight="11" bottom="2" />
+						</s:BorderContainer>
+						<s:BorderContainer width="62" height="30" borderColor="0xD9D9CD" backgroundColor="0xF0F0EC" cornerRadius="3">
+							<s:Label id="statFollowing" left="50%" horizontalCenter="0" color="0x445066" fontSize="11" lineHeight="12" top="4" fontWeight="bold" />
+							<s:Label text="Following" left="50%" horizontalCenter="0" color="0x777070" fontSize="10" lineHeight="11" bottom="2" />
+						</s:BorderContainer>
+						<s:BorderContainer width="62" height="30" borderColor="0xD9D9CD" backgroundColor="0xF0F0EC" cornerRadius="3">
+							<s:Label id="statFollowers" left="50%" horizontalCenter="0" color="0x445066" fontSize="11" lineHeight="12" top="4" fontWeight="bold" />
+							<s:Label text="Followers" left="50%" horizontalCenter="0" color="0x777070" fontSize="10" lineHeight="11" bottom="2" />
+						</s:BorderContainer>
+						<s:BorderContainer width="62" height="30" borderColor="0xD9D9CD" backgroundColor="0xF0F0EC" cornerRadius="3">
+							<s:Label id="statListed" left="50%" horizontalCenter="0" color="0x445066" fontSize="11" lineHeight="12" top="4" fontWeight="bold" />
+							<s:Label text="Listed" left="50%" horizontalCenter="0" color="0x777070" fontSize="10" lineHeight="11" bottom="2" />
+						</s:BorderContainer>
+					</s:HGroup>
+				</s:VGroup>
+			</s:HGroup>
+		</s:VGroup>
+	
+		<s:BorderContainer top="{userInfoContainer.height+10}" left="5" right="5" bottom="5" borderColor="0xD9D9CD" borderWeight="1">
+			<s:Scroller id="scroller" width="100%" top="0" bottom="0">
+				<s:VGroup id="tweets" top="0" left="0" right="0" bottom="0" />
+			</s:Scroller>
+			
+			<s:Label id="noContentMsg" text="No content!" color="0x888888" visible="false" fontSize="13" top="30" horizontalCenter="0" left="50%" />
+		</s:BorderContainer>
+	</s:BorderContainer>
+	<s:BorderContainer borderColor="0xD9D9CD" borderWeight="1" backgroundColor="0xE4E4DA" left="10" right="10" top="10" bottom="10" visible="{isDoing}">
+		<control:Spinner id="streamLoading" scaleX="3" scaleY="3" horizontalCenter="0" left="50%" verticalCenter="0" top="50%" />
+	</s:BorderContainer>
+	
+	<s:Graphic id="closeBtn" width="20" height="20" right="2" top="3" click="onCloseClick(event)" buttonMode="true" useHandCursor="true" mouseChildren="true">
+		<s:Ellipse width="20" height="20">
+			<s:fill>
+				<s:SolidColor color="0x222222" />
+			</s:fill>
+			<s:stroke>
+				<s:SolidColorStroke weight="2" color="0xE4E4DA" />
+			</s:stroke>
+		</s:Ellipse>
+		<s:Line xFrom="6" xTo="14" yFrom="6" yTo="14">
+			<s:stroke>
+				<s:SolidColorStroke weight="3" color="0xF5F5F5" />
+			</s:stroke>
+		</s:Line>
+		<s:Line xFrom="6" xTo="14" yFrom="14" yTo="6">
+			<s:stroke>
+				<s:SolidColorStroke weight="3" color="0xF5F5F5" />
+			</s:stroke>
+		</s:Line>
+	</s:Graphic>
+</s:Group>

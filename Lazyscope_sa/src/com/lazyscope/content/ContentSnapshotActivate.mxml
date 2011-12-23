@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Window xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  xmlns:mx="library://ns.adobe.com/flex/mx"
+		  width="892" showStatusBar="false" closing="onClosing(event)" height="632" alwaysInFront="true">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			import com.lazyscope.ConfigDB;
+			import com.lazyscope.twitter.TweetWindow;
+			private static var instance:ContentSnapshotActivate;
+			private static var _balloon:Group;
+			
+			public static function terminate():void
+			{
+				if (instance) {
+					instance.close();
+					instance = null;
+				}
+			}
+			
+			public static function show(balloon:Group):void
+			{
+				if (!instance) {
+					instance = new ContentSnapshotActivate;
+					instance.open();
+				}
+				
+				_balloon = balloon;
+				
+				instance.visible = true;
+				if (instance.nativeWindow)
+					instance.nativeWindow.activate();
+				
+				instance.setFocus();
+				instance.setCenter();
+				instance.callLater(function():void {
+					instance.btn.setFocus();
+				});
+			}
+			
+			public function setCenter():void
+			{
+				nativeWindow.y = ((Screen.mainScreen.visibleBounds.height - Screen.mainScreen.visibleBounds.y) - height)/2;
+				nativeWindow.x = ((Screen.mainScreen.visibleBounds.width - Screen.mainScreen.visibleBounds.x) - width)/2;
+			}
+			
+			public function onClosing(event:Event):void
+			{
+				if (Base.exiting) return;
+				visible = false;
+				event.preventDefault();
+			}
+			
+			public function onClick(event:MouseEvent=null):void
+			{
+				var txt:String = msg.text;
+				if (!txt.match(/lazyscope\.com\/snap/)) {
+					txt = txt.replace(/(http:\/\/)?(www\.)?lazyscope.com(\/?)(snap)?/g, '')+' '+('http://lazyscope.com/snap');
+				}
+				
+				terminate();
+				Base.twitter.updateStatus(function(arr:Array):void {
+					TweetWindow.snapshotEnabled = true;
+					if (_balloon) _balloon.visible = true;
+					ConfigDB.set('snapshotE'+(Base.twitter.userid), 't');
+				}, txt);
+			}
+		]]>
+	</fx:Script>
+	
+	<s:VGroup id="container" width="100%" clipAndEnableScrolling="true" horizontalCenter="0" paddingBottom="20" paddingLeft="20" paddingRight="20" paddingTop="10">
+		<mx:HTML location="http://www.lazyscope.com/activate.php" width="852" height="464" verticalScrollPolicy="off" horizontalScrollPolicy="off" cachePolicy="on" />
+		
+		<s:Group width="100%">
+			<s:layout>
+				<s:BasicLayout />
+			</s:layout>
+			
+			<s:VGroup horizontalCenter="0" gap="10">
+				<s:Label text="To unlock this feature, tell your friends by Tweeting this!" fontSize="21" color="0x4D6102" width="100%" textAlign="center" />
+				
+				<s:TextArea id="msg" width="514" height="42" editable="true" maxChars="110" fontSize="15" borderAlpha="0.5" focusEnabled="true">
+					<!--
+					<s:text>You can now attach content preview to your Tweets just like Facebook. Check it out. http://lazyscope.com/snap</s:text>
+					-->
+					<s:text>You can now attach a link preview to your Tweets using Lazyscope. Check it out. http://lazyscope.com/snap</s:text>
+				</s:TextArea>
+				
+				<s:Group width="514">
+					<s:Button id="btn" fontSize="30" left="50" width="414" height="50" label="Click to Tweet and unlock" focusThickness="5" click="onClick(event)" />
+				</s:Group>
+			</s:VGroup>
+			
+		</s:Group>
+	</s:VGroup>
+	
+</s:Window>

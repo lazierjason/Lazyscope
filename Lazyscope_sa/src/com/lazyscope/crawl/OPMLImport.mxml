@@ -1,0 +1,304 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   creationComplete="onCreationComplete(event)"
+			   close="onClose()"
+			   title="Import subscriptions"
+			   keyDown="onKeyDown(event)"
+			   width="360" height="410">
+	
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			import com.lazyscope.Util;
+			import com.lazyscope.content.GoogleReader;
+			
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			import mx.managers.PopUpManager;
+			
+			public static const MaxRunner:Number = 10;
+			
+			public static var _opmlImport:OPMLImport = null;
+			public static function get opmlImport():OPMLImport {
+				if (OPMLImport._opmlImport) return OPMLImport._opmlImport; 
+				return OPMLImport._opmlImport = new OPMLImport;
+			}
+			
+			public var inProgress:Boolean = false;
+			
+			public function onCreationComplete(event:Event):void
+			{
+			}
+			
+			public function init():void
+			{
+				container.enabled = true;
+				googleReaderID.text = '';
+				googleReaderPW.text = '';
+				googleReaderID.setFocus();
+				
+				processedTasks = 0;
+				todoTasks = 0;
+				_finishTimer = 0;
+			}
+			
+			public function onClose():void
+			{
+				PopUpManager.removePopUp(OPMLImport.opmlImport);
+			}
+
+			private function errorToSelect():void
+			{
+				Util.isShowingAlert = true;
+				Alert.show('Please select an XML file.', '', Alert.OK, Base.app, function(event:CloseEvent):void{
+					Util.isShowingAlert = false;
+				});
+			}
+			
+			private function errorGoogleReader(msg:String=null):void
+			{
+				Util.isShowingAlert = true;
+				Alert.show(msg ? msg : 'Please check your ID/PW.', '', Alert.OK, Base.app, function(event:CloseEvent):void{
+					Util.isShowingAlert = false;
+					container.enabled = true;
+				});
+			}
+			
+			public function errorInProcess():void
+			{
+				Util.isShowingAlert = true;
+				Alert.show('Feed importing is in process.\nPlease wait until it\'s over.', '', Alert.OK, Base.app, function(event:CloseEvent):void{
+					Util.isShowingAlert = false;
+					container.enabled = true;
+				});
+			}
+			
+			protected function importOPMLfromGoogleReaderSubmit():void
+			{
+				if (!googleReaderID.text || !googleReaderPW.text) {
+					errorGoogleReader();
+					return;
+				}
+				container.enabled = false;
+				
+				var func:Function = function(auth:URLVariables):void {
+					if (!auth || !auth.Auth) {
+						errorGoogleReader();
+						return;
+					}
+					
+					GoogleReader.getSubscriptionList(auth, googleReaderID.text, importOPMLfromGoogleReaderCallback);
+				}
+
+				GoogleReader.getSessionID(googleReaderID.text, googleReaderPW.text, func); 
+			}
+			
+			public function importOPMLfromGoogleReaderCallback(data:ByteArray):void
+			{
+				if (!data)
+					errorGoogleReader('Something went wrong with Google Reader.\nPlease try again.');
+				else
+					analyzeOPML(data);
+			}
+			
+			protected function importOPML_button_clickHandler(event:MouseEvent):void
+			{
+				if (!fileList || !fileList.selectedPath) {
+					errorToSelect();
+					return;
+				}
+				var f:File = new File(fileList.selectedPath);
+				if (!f.exists || f.isDirectory) {
+					errorToSelect();
+					return;
+				}
+				
+				var fs:FileStream = new FileStream;
+				fs.open(f, FileMode.READ);
+				
+				var data:ByteArray = new ByteArray;
+				fs.readBytes(data);
+				
+				analyzeOPML(data);
+			}
+			
+			protected var processedTasks:Number = 0;
+			protected var todoTasks:Number = 0;
+			protected var _finishTimer:uint = 0;
+			protected function checkFinish():void
+			{
+				if (_finishTimer)
+					clearTimeout(_finishTimer);
+				
+				if (todoTasks <= 0) return;
+				
+				if (processedTasks >= todoTasks) {
+					todoTasks = 0;
+					finish();
+				}else{
+					_finishTimer = setTimeout(checkFinish, 1000);
+				}
+			}
+			
+			protected function analyzeOPML(data:ByteArray):void
+			{
+				var str:String = null;
+				var line:String = data.readMultiByte(Math.min(100, data.bytesAvailable), 'UTF-8');
+				data.position = 0;
+				if (line) {
+					var m:Array = line.match(/encoding="([^"]+)"/);
+					if (m && m[1] && m[1].toString().toLowerCase() != 'utf-8') {
+						str = data.readMultiByte(data.length, m[1]);
+					}
+				}
+				if (str == null)
+					str = data.readMultiByte(data.length, 'UTF-8');
+				
+				var xml:XML;
+				try{
+					xml = new XML(str);
+					var children:XMLList = xml.body.descendants('outline');
+					if (children.length() <= 0) {
+						finish();
+						Util.isShowingAlert = true;
+						Alert.show('', 'No feed found!', Alert.OK, Base.app, function(event:CloseEvent):void{
+							Util.isShowingAlert = false;
+							container.enabled = true;
+						});
+						return;
+					}
+					
+					inProgress = true;
+//					progress.visible = true;
+//					progress.maximum = children.length();
+//					progress.setProgress(0, children.length());
+////					container.enabled = false;
+					
+					var func:Function = function(i:Number):void {
+						if (i >= children.length()) {
+							checkFinish();
+							return;
+						}
+//						progress.setProgress(i+1, children.length());
+						
+						processedTasks++;
+						
+						var feedURL:String = children[i].@xmlUrl;
+						if (feedURL) {
+							Base.feed.registerFeed('http://'+(feedURL.replace(/^(https?|feed):\/\//i, '')), function(b:Object):void {
+								func(i+MaxRunner);
+							}, false);
+						}else{
+							func(i+MaxRunner);
+						}
+						System.disposeXML(xml);
+					};
+					
+					todoTasks = children.length();
+					processedTasks = 0;
+					
+					for (var j:Number=0; j < MaxRunner && j < children.length(); j++) {
+						func(j);
+					}
+					onClose();
+				}catch(e:Error) {
+					trace(e.getStackTrace(), 'analyzeOPML');
+					Util.isShowingAlert = true;
+					Alert.show(e.toString(), 'Error occurs!', Alert.OK, Base.app, function(event:CloseEvent):void{
+						Util.isShowingAlert = false;
+						container.enabled = true;
+					});
+					finish();
+					System.disposeXML(xml);
+				}
+			}
+			
+			public function finish():void
+			{
+				if (Util.isShowingAlert) {
+					setTimeout(finish, 1300);
+				}else{
+					inProgress = false;
+					clear();
+	
+					Util.isShowingAlert = true;
+					Alert.show('Please OK to refresh your stream.', 'Finished importing subscriptions', Alert.OK, Base.app, function(event:CloseEvent):void {
+						Base.stream.wakeupLast = 1;
+						Base.stream.wakeupCheck();
+						System.gc();
+						Util.isShowingAlert = false;
+					}, null, Alert.OK);
+					
+				}
+			}
+			
+			public function clear():void
+			{
+				if (inProgress) return;
+//				progress.visible = false;
+				if (container)
+					container.enabled = true;
+			}
+
+			protected function googleReaderIDPW_keyDownHandler(event:KeyboardEvent):void
+			{
+				if (event.keyCode == 13)
+					importOPMLfromGoogleReaderSubmit();
+			}
+
+			protected function onKeyDown(event:KeyboardEvent):void
+			{
+				//trace('### keyCode', event.keyCode);
+				if (event.keyCode == 27) {
+//					event.stopPropagation();
+//					event.preventDefault();
+					onClose();
+				}
+			}
+		]]>
+	</fx:Script>
+	
+	<s:VGroup id="container" gap="10" width="360" paddingTop="10" paddingBottom="10" paddingLeft="10" paddingRight="10">
+		<s:Label width="100%" color="0x444444" fontSize="12" text="Lazyscope merges your Twitter stream and your RSS stream into a single unified realtime feed. Let's try importing all your subscriptions into Lazyscope!" />
+		<s:Label text="Option 1. Import from Google Reader" fontSize="14" color="0x333333" fontWeight="bold" />
+		<s:HGroup width="100%" gap="5">
+			<s:Image source="img/icon_GoogleReader_16x16.png" height="16" width="16" />
+			<s:Label text="Google Reader" fontSize="12" width="99" color="0x666666" paddingTop="4" />
+		</s:HGroup>
+		<s:Group width="100%" height="40">
+			<s:Label text="ID" fontSize="11" width="20" color="0x666666" top="3" left="21" />
+			<s:Label text="PW" fontSize="11" width="20" color="0x666666" top="25" left="21" />
+			<s:TextInput id="googleReaderID" maxChars="200" left="47" top="0" height="18" width="200" restrict="0-9a-zA-Z_@." paddingTop="4" fontSize="11" keyDown="googleReaderIDPW_keyDownHandler(event)" />
+			<s:TextInput id="googleReaderPW" maxChars="200" left="47" top="22" height="18" width="200" displayAsPassword="true" restrict="0-9 a-zA-Z`~!@#$%\\\^\&amp;*()_+\\\-=[]\\\\{}|;':\&quot;,./\&lt;\&gt;?" paddingTop="4" fontSize="11" keyDown="googleReaderIDPW_keyDownHandler(event)" />
+			<s:Button label="Get Feeds" click="importOPMLfromGoogleReaderSubmit()" top="0" left="255" height="40" width="85" />
+		</s:Group>
+		
+		<mx:Spacer height="5" />
+		
+		<s:Label text="Option 2. Import from OPML file" fontSize="14" color="0x333333" fontWeight="bold" />
+		<mx:Form id="form" paddingTop="0" paddingBottom="0" paddingLeft="0" paddingRight="0" width="100%">
+			<s:Group width="100%" top="0" height="20">
+				<s:BorderContainer id="btnFolderUp" width="18" height="18" borderColor="0xAFBBCF" backgroundColor="0xCFDBEF" borderAlpha="0" backgroundAlpha="0" enabled="{fileList.canNavigateUp}" click="fileList.navigateUp();" toolTip="Folder Up" rollOver="btnFolderUp.setStyle('borderAlpha',1);btnFolderUp.setStyle('backgroundAlpha',1);" rollOut="btnFolderUp.setStyle('borderAlpha',0);btnFolderUp.setStyle('backgroundAlpha',0);" buttonMode="true" mouseChildren="true" useHandCursor="true" left="0" top="0">
+					<s:Image source="button/folderup.png" width="16" height="16" />
+				</s:BorderContainer>
+				<s:Button label="Import OPML" click="importOPML_button_clickHandler(event)" height="18" width="100" right="0" top="0" />
+			</s:Group>
+			<mx:FileSystemList id="fileList" directory="{File.userDirectory}" width="100%" height="80" top="20" />
+		</mx:Form>
+		
+		<mx:Spacer height="5" />
+		
+		<s:Group width="100%" height="36">
+			<s:Label text="Option 3. Nah, maybe later." fontSize="14" color="0x333333" fontWeight="bold" left="0" top="0" />
+			<s:Button label="Don't import" click="onClose()" height="18" width="100" right="0" bottom="0" />
+		</s:Group>
+
+		
+		<!--
+		<mx:ProgressBar id="progress" bottom="3" right="14" width="257" minimum="0" mode="manual" visible="false" label="Imported %3%% of your feeds" />
+		-->
+	</s:VGroup>
+</s:TitleWindow>

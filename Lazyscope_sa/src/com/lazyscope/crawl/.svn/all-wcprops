@@ -1,0 +1,71 @@
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/svn/p4/!svn/ver/9466/trunk/air/Scouter/src/com/lazyfeed/crawl
+END
+ParserAtom.as
+K 25
+svn:wc:ra_dav:version-url
+V 76
+/svn/p4/!svn/ver/9400/trunk/air/Scouter/src/com/lazyfeed/crawl/ParserAtom.as
+END
+WorkingQueue.as
+K 25
+svn:wc:ra_dav:version-url
+V 78
+/svn/p4/!svn/ver/9339/trunk/air/Scouter/src/com/lazyfeed/crawl/WorkingQueue.as
+END
+Parser.as
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/svn/p4/!svn/ver/9400/trunk/air/Scouter/src/com/lazyfeed/crawl/Parser.as
+END
+Feed.as
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/svn/p4/!svn/ver/9422/trunk/air/Scouter/src/com/lazyfeed/crawl/Feed.as
+END
+OPMLImport.mxml
+K 25
+svn:wc:ra_dav:version-url
+V 78
+/svn/p4/!svn/ver/9466/trunk/air/Scouter/src/com/lazyfeed/crawl/OPMLImport.mxml
+END
+FeedFuncRequest.as
+K 25
+svn:wc:ra_dav:version-url
+V 81
+/svn/p4/!svn/ver/9444/trunk/air/Scouter/src/com/lazyfeed/crawl/FeedFuncRequest.as
+END
+FeedFuncRequestEvent.as
+K 25
+svn:wc:ra_dav:version-url
+V 86
+/svn/p4/!svn/ver/9145/trunk/air/Scouter/src/com/lazyfeed/crawl/FeedFuncRequestEvent.as
+END
+HTMLParser.as
+K 25
+svn:wc:ra_dav:version-url
+V 76
+/svn/p4/!svn/ver/8970/trunk/air/Scouter/src/com/lazyfeed/crawl/HTMLParser.as
+END
+Crawler.as
+K 25
+svn:wc:ra_dav:version-url
+V 73
+/svn/p4/!svn/ver/9466/trunk/air/Scouter/src/com/lazyfeed/crawl/Crawler.as
+END
+ParserRSS.as
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/svn/p4/!svn/ver/9400/trunk/air/Scouter/src/com/lazyfeed/crawl/ParserRSS.as
+END
+FeedFunc.as
+K 25
+svn:wc:ra_dav:version-url
+V 74
+/svn/p4/!svn/ver/9422/trunk/air/Scouter/src/com/lazyfeed/crawl/FeedFunc.as
+END

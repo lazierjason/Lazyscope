@@ -1,0 +1,86 @@
+package com.lazyscope.content
+{
+	import com.lazyscope.URL;
+	import com.lazyscope.crawl.Crawler;
+	import com.lazyscope.entry.Blog;
+	import com.lazyscope.entry.BlogEntry;
+	
+	public class Yfrog
+	{
+		public function Yfrog()
+		{
+		}
+		
+		public static function readabilityEnabled(url:URL):Boolean
+		{
+			if (url.path.match(/\.php/)) {
+				return true;
+			}
+			return false;
+		}
+		
+		public static function fillContent(entry:BlogEntry):void
+		{
+			if (entry.content)
+				entry.displayContent = entry.content.replace(/size=100/g, 'size=640').replace(/\.th\.jpg/g, '.jpg');
+		}
+		
+		public static function makeEntry(url:URL, callback:Function):void
+		{
+			if (url.path.match(/\.php/)) {
+				if (callback != null) callback(null);
+				return;
+			}
+			
+			var m:Array = url.path.match(/\/([^\/]+)/);
+			
+			if (m) {
+				Crawler.downloadURL('http://yfrog.com/api/xmlInfo?path='+m[1], function(u:String, body:String, httpStatus:int):void {
+					if (!body) {
+						if (callback != null) callback(null);
+						return;
+					}
+					
+					var xml:XML;
+					try{
+						xml = new XML(body);
+						var ns:Namespace = xml.namespace();
+						var blog:Blog = null;
+						
+						var username:String = xml.ns::uploader.ns::username;
+						if (username) {
+							username = username.split(/~/).pop();
+							if (username)
+								blog = new Blog('http://yfrog.com/froggy.php?username='+(username.toLowerCase()), 'http://yfrog.com/rss.php?username='+(username.toLowerCase()), username);
+						}
+						
+						var entry:BlogEntry = new BlogEntry;
+						var url:String = 'http://yfrog.com/'+(m[1]);
+						
+						entry.blog = blog;
+						
+						entry.link = url;
+						entry.title = xml.ns::files.ns::image;
+						entry.content = '<a href="'+url+'"><img src="'+(xml.ns::links.ns::image_link)+'" /></a>';
+						entry.description = '';
+						entry.image = xml.ns::links.ns::thumb_link;
+						entry.published.setTime(xml.@timestamp+'000');
+						entry.source = 'API';
+						entry.service = 'Yfrog';
+						
+						if (callback != null)
+							callback(entry);
+					}catch(e:Error) {
+						trace(e.getStackTrace(), 'makeEntry yfrog');
+						//trace(body);
+						if (callback != null) callback(null);
+						return;
+					}
+				});
+			}else{
+				if (callback != null) callback(null);
+				return;
+			}
+		}
+	}
+}

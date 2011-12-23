@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:List xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		xmlns:s="library://ns.adobe.com/flex/spark" 
+		xmlns:mx="library://ns.adobe.com/flex/mx"
+		xmlns:stream="com.lazyfeed.stream.*"
+		dataProvider="{data}"
+		itemRenderer="com.lazyfeed.sidebar.SidebarAccountItemRenderer"
+		borderVisible="false"
+		addedToStage="onAddedToStage(event)"
+		width="100%"
+		visible="false"
+		includeInLayout="false">
+
+	<s:layout>
+		<s:VerticalLayout gap="0" />
+	</s:layout>
+	
+	<fx:Declarations>
+		<stream:StreamCollection id="data" uniqKey="id" />
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyfeed.Base;
+			import com.lazyfeed.account.AccountTwitter;
+			import com.lazyfeed.account.IAccount;
+			
+			public function add(account:IAccount):void
+			{
+				data.addItem(account);
+
+				visible = includeInLayout = true;
+			}
+			
+			public function remove(type:String):void
+			{
+				for (var i:Number = data.length; i--;) {
+					var account:IAccount = data.getItemAt(i) as IAccount;
+					if (account && account.type == type) {
+						data.removeItemAt(i);
+					}
+				}
+				
+				if (data.length <= 0)
+					visible = includeInLayout = false;
+			}
+			
+			public function setFilter():void
+			{
+				Base.filterType = 2;
+			}
+			
+			protected function onAddedToStage(event:Event):void
+			{
+				scroller.setStyle('horizontalScrollPolicy', 'off');
+				scroller.setStyle('verticalScrollPolicy', 'off');
+			}
+
+		]]>
+	</fx:Script>
+</s:List>

@@ -1,0 +1,154 @@
+html, body {
+	padding:0px;
+	margin:0px;
+	font-family:Arial, Helvetica, sans-serif;
+	font-size:10.5pt;
+	line-height:130%;
+	color:#333;
+}
+
+html {
+	position:relative;
+	overflow:hidden;
+}
+
+body {
+	width:100%;
+	background-color:#fafafa;
+	overflow:hidden;
+	
+	-khtml-user-select:none;
+}
+
+.clear {clear:both;}
+
+div.header {
+	width:100%;
+	height:23px;
+	border-top:solid 1px #dfdfdf;
+	overflow:hidden;
+	white-space:nowrap;
+	position:fixed;
+	bottom:0px;
+	left:0px;
+}
+
+div.title {
+	font-size:9pt;
+	color:#333333;
+	width:220px;
+	padding:1px 0px 2px 6px;
+	float:left;
+}
+
+div.controls {
+	width:100px;
+	padding:0px 7px 0px 0px;
+	float:right;
+	text-align:right;
+}
+	div.controls span.paging {
+		display:inline-block;
+		text-align:center;
+		color:#333333;
+		font-size:9pt;
+	}
+	div.controls a.button-prev,
+	div.controls a.button-next {
+		display:inline-block;
+		width:11px;
+		height:13px;
+		background-image:url(../images/btn_arr_11x13x2.gif);
+		background-repeat:no-repeat;
+		text-indent:-1000px;
+		text-align:justify;
+		overflow:hidden;
+		vertical-align:text-bottom;
+		cursor:pointer;
+	}
+	div.controls a.button-prev {
+		background-position:0px 0px;
+	}
+	div.controls a.button-next {
+		background-position:-11px 0px;
+	}
+
+div.main {
+	padding:5px;
+	font-size:9pt;
+}
+
+div.main div.twitter {
+	color:#444444;
+}
+	div.main div.twitter img.profile {
+		width:34px;
+		height:34px;
+		margin-right:8px;
+		float:left;
+	}
+	div.main div.twitter div.tw-msg {
+		width:322px;
+		float:right;
+	}
+	div.main div.twitter strong {
+		color:#333333;
+	}
+	
+div.main div.blog {
+	color:#888888;
+}
+	div.main div.blog div.entry-title {
+		color:#333333;
+		font-weight:bold;
+		font-size:15px;
+		line-height:17px;
+		max-height:53px;
+		overflow:hidden;
+		margin-bottom:5px;
+	}
+	div.main div.blog div.description {
+		color:#333333;
+		font-size:12px;
+		line-height:14px;
+		max-height:86px;
+		overflow:hidden;
+		margin-bottom:3px;
+	}
+		div.main div.blog div.description div.entry-description {
+			overflow:hidden;
+		}
+		div.main div.blog div.description div.thumb-wrap {
+			float:left;
+			visibility:hidden;
+			overflow:hidden;
+			width:1px;
+			height:1px;
+			margin-right:-1px;
+			margin-bottom:-1px;
+		}
+			div.main div.blog div.description div.thumb-wrap img.thumb {
+			}
+	div.main div.blog div.blog-info {
+		clear:both;
+		color:#999999;
+		font-size:11px;
+		line-height:13px;
+		max-height:31px;
+		min-height:16px;
+		overflow:hidden;
+	}
+		div.main div.blog div.blog-info strong {
+			color:#333333;
+			font-size:12px;
+		}
+		div.main div.blog div.blog-info img {
+			vertical-align:bottom;
+			max-height:16px;
+			max-width:16px;
+		}
+	
+	div.main div.blog.embedded {
+		padding:5px 0px 0px 42px;
+	}
+	

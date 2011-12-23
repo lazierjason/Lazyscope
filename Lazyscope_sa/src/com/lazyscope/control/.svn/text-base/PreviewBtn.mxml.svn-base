@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:stream="com.lazyfeed.stream.*"
+		 xmlns:mx="library://ns.adobe.com/flex/mx" width="27" height="27" right="5" top="50%" verticalCenter="0" alpha="0.3">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyfeed.stream.StreamItemRenderer;
+			public static var BTN:PreviewBtn = new PreviewBtn;
+
+			private var _toOpen:Boolean = true;
+			public function set toOpen(value:Boolean):void
+			{
+				_toOpen = value;
+				arrTop.xTo = arrBot.xTo = value ? 22 : 4; 
+			}
+			public function get toOpen():Boolean
+			{
+				return _toOpen;
+			}
+			
+			public function onCreationComplete():void
+			{
+			}
+		]]>
+	</fx:Script>
+	
+	<s:Rect width="27" height="27" left="0" top="0" radiusX="13.5" radiusY="13.5">
+		<s:fill>
+			<s:SolidColor color="0x000000" />
+		</s:fill>
+	</s:Rect>
+	
+	<s:Line xFrom="4" xTo="22" y="13">
+		<s:stroke>
+			<s:SolidColorStroke color="#FFFFFF" weight="4" />
+		</s:stroke>
+	</s:Line> 
+	<s:Line xFrom="13" yFrom="5" xTo="22" yTo="13" id="arrTop">
+		<s:stroke>
+			<s:SolidColorStroke color="#FFFFFF" weight="4" />
+		</s:stroke>
+	</s:Line> 
+	<s:Line xFrom="13" yFrom="21" xTo="22" yTo="13" id="arrBot">
+		<s:stroke>
+			<s:SolidColorStroke color="#FFFFFF" weight="4" />
+		</s:stroke>
+	</s:Line>
+</s:Group>

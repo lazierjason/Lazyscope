@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8"?>
+<stream:StreamItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+						   xmlns:s="library://ns.adobe.com/flex/spark" 
+						   xmlns:mx="library://ns.adobe.com/flex/mx"
+						   xmlns:lazyscope="com.lazyscope.*"
+						   xmlns:stream="com.lazyscope.stream.*"
+						   xmlns:control="com.lazyscope.control.*"
+						   minHeight="56"
+						   click="onFocusIn(this, true, true)"
+						   rollOver="clearHighlight();"
+						   clipAndEnableScrolling="true">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			import com.lazyscope.CachedImage;
+			import com.lazyscope.Util;
+			import com.lazyscope.entry.StreamEntry;
+			import com.lazyscope.twitter.TweetWindow;
+			import com.swfjunkie.tweetr.data.objects.DirectMessageData;
+			
+			import flashx.textLayout.conversion.TextConverter;
+			import flashx.textLayout.events.FlowElementMouseEvent;
+			
+			import mx.events.FlexEvent;
+			
+			import spark.components.Image;
+			import spark.core.ContentCache;
+			
+			public static var loadingSpins:Array = new Array;
+			
+			public static function getContent(e:StreamEntry, isUpdated:Boolean=false):void
+			{
+				if (e.childRequesting) return;
+				e.childRequesting = true;
+				
+				var msg:DirectMessageData = e.twitMsg;
+				if (!msg.links || msg.links.length <= 0) {
+					e.childRequesting = false;
+					return;
+					
+				}
+				
+				StreamItemRendererTwitter.getContent2(e, 'message', msg.links, isUpdated);
+			}
+			
+			private var userLink:String;
+			private var userScreenName:String;
+//			public function userNameClick(event:Event):void
+//			{
+//				if (!userLink) return;
+//				Base.navigateInBrowser(userLink);
+//			}
+			
+			override public function set data(value:Object):void
+			{
+				if (!value) {
+					try{
+						text.text = null;
+						image.removeAllElements();
+						entryChild.removeAllElements();
+					}catch(err:Error) {
+						trace(err.getStackTrace(), 'set data render tw msg');
+					}
+					
+					super.data = value;
+					return;
+				}
+				var e:StreamEntry = value as StreamEntry;
+
+				if (super.data && StreamEntry(super.data).sid == e.sid) {
+					return;
+				}
+				super.data = value;
+				
+				opaqueBackground = e.isUpdated?0xF4FAFD:null;
+				//setStyle('alternatingItemColors', e.isUpdated?bgcolorN:bgcolor);
+				
+				var msg:DirectMessageData = e.twitMsg;
+				
+				timeStr.text = Util.toIntervalString(msg.published/1000);
+				
+				fromto.text = e.twitMsgIsSent ? 'To' : 'From';
+				
+
+				
+				
+				if (e.twitMsgIsSent) {
+					image.right = imageWrapper.right = 12;
+					msgContainer.left = 10;
+					msgContainer.right = 68;
+				}else{
+					image.left = imageWrapper.left = 10;
+				}
+
+				if (!e.imageElement) {
+					e.imageElement = new CachedImage;
+					//e.imageElement.noCustomDownload = true;
+					e.imageElement.width = e.imageElement.height = 48;
+					e.imageElement.source = msg.sender.profileImageUrl;
+				}
+				image.addElement(e.imageElement);
+				e.imageElement = null;
+
+				
+//				if (!e.twitMsgIsSent) {
+//					btnReply.visible = btnReply.includeInLayout = true;
+//				}
+				
+				e.renderer = this;
+				
+				var i:Number;
+				
+				var _value:String = Util.trim(msg.text, true);
+				_value = Util.convertFromHTML(_value.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+				if (_value.match(/((^|[\s\(\)\{\}\[\]\+\=\<\>\-:"',\.!\?\/])@)([a-zA-Z0-9_]+)/)) {
+					_value = _value.replace(/((^|[\s\(\)\{\}\[\]\+\=\<\>\-:"',\.!\?\/])@)([a-zA-Z0-9_]+)/g, '$1<a href="$3">$3</a>');
+					text.textFlow = TextConverter.importToFlow(_value, TextConverter.TEXT_FIELD_HTML_FORMAT, Util.styling);
+					text.textFlow.addEventListener(FlowElementMouseEvent.CLICK, linkHandler, false, 100, true);
+				}else{
+					text.text = _value;
+				}
+				
+				
+				/*
+				if (msg.links.length > 0) {
+					var p:Number;
+					for (i = 0; i < msg.links.length; i++) {
+						p = text.text.indexOf(msg.links[i]);
+						if (p < 0) continue;
+						text.text = text.text.substr(0, p) + (msg.links.length > 1 ? ('['+(i+1)+']') : '[LINK]') + text.text.substr(p+msg.links[i].length);
+					} 
+				}
+				*/
+				
+				/*
+				try{
+					text.textFlow = st.textFlow;
+				}catch(err:Error) {
+					text.text = st.text;
+					trace(err);
+				}
+				*/
+				userName.text = e.twitMsgIsSent ? msg.recipientScreenName : msg.senderScreenName;
+				userLink = 'http://twitter.com/' + (e.twitMsgIsSent ? msg.recipientScreenName : msg.senderScreenName);
+				userScreenName = msg.senderScreenName;
+				
+				if (entryChild.numElements > 0)
+					entryChild.removeAllElements();
+				
+				if (!e.child && !e.childRequesting && msg.links.length > 0) {
+					e._todoLinkCount = e._todoLinkCount > 0 ? e._todoLinkCount : msg.links.length;
+					
+					getContent(e);
+				}
+				
+				if (e.child) {
+					entryChild.addElement(e.child);
+//					if (e.child.numChildren + spinners.numElements < msg.links.length) {
+					if (e.child.numChildren + spinners.numElements < e._todoLinkCount) {
+						for (i=msg.links.length-(e.child.numChildren + spinners.numElements); i--;)
+							StreamItemRendererTwitter.addSpinner(e);
+					}
+				}
+				
+				if (StreamItemRenderer.focusedData == e && e.renderer)
+					StreamItemRenderer.onFocusIn(e.renderer, false);
+			}
+		]]>
+	</fx:Script>
+	
+	<s:VGroup width="100%" top="8" bottom="0" gap="0">
+		<s:Group width="100%">
+			<s:Group id="image" width="48" height="48" top="0">
+				<s:filters>
+					<s:DropShadowFilter distance="1" blurX="4" angle="90" alpha="0.75" />
+				</s:filters>
+				<s:mask>
+					<s:Graphic>
+						<s:Rect width="48" height="48" radiusX="4">
+							<s:fill>
+								<s:SolidColor color="0xFFFFFF" />
+							</s:fill>
+						</s:Rect>
+					</s:Graphic>
+				</s:mask>
+			</s:Group>
+			<s:BorderContainer id="imageWrapper" alpha="0" width="48" height="48" top="0" click="Base.userViewer.displayUser(userScreenName)" mouseChildren="true" useHandCursor="true" buttonMode="true" />
+			
+			<s:VGroup id="msgContainer" left="68" right="12">
+				<s:RichEditableText editable="false" id="text" width="100%" maxHeight="100" styleName="font13" lineHeight="15" color="0x444444" />
+				<s:HGroup width="100%" verticalAlign="bottom">
+					<s:Label id="fromto" color="0x999999" styleName="font12" fontFamily="Helvetica" verticalAlign="bottom" height="14" />
+					<!--
+					<s:Label id="userName" fontWeight="bold" styleName="font12" color="0x333333" fontFamily="Helvetica" useHandCursor="true" buttonMode="true" mouseChildren="true" verticalAlign="bottom" height="14" click="userNameClick(event)" rollOver="StreamItemRendererTwitter.userName_rollOverHandler(event)" rollOut="StreamItemRendererTwitter.userName_rollOutHandler(event, 'name')" />
+					-->
+					<s:Label id="userName" fontWeight="bold" styleName="font12" color="0x333333" fontFamily="Helvetica" useHandCursor="true" buttonMode="true" mouseChildren="true" verticalAlign="bottom" height="14" click="Base.userViewer.displayUser(userName.text)" rollOver="StreamItemRendererTwitter.userName_rollOverHandler(event)" rollOut="StreamItemRendererTwitter.userName_rollOutHandler(event, 'name')" />
+					
+					<s:Label id="timeStr" height="14" styleName="font11" color="0x999999" verticalAlign="bottom" />
+
+					<s:HGroup id="spinners" paddingTop="4" />
+					
+				</s:HGroup>
+			</s:VGroup>
+		</s:Group>
+		
+		<mx:Spacer height="4" />
+		
+		<s:VGroup id="entryChild" width="100%" clipAndEnableScrolling="true" />
+		
+		<s:Group id="btns" width="100%" includeInLayout="false" />
+	</s:VGroup>
+
+	<s:Line left="0" right="0" bottom="0">
+		<s:stroke>
+			<s:SolidColorStroke color="0xAAAAAA" />
+		</s:stroke>
+	</s:Line>
+</stream:StreamItemRenderer>

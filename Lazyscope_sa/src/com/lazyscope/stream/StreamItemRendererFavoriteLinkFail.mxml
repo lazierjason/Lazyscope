@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<stream:StreamItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+						   xmlns:s="library://ns.adobe.com/flex/spark" 
+						   xmlns:mx="library://ns.adobe.com/flex/mx"
+						   xmlns:stream="com.lazyscope.stream.*"
+						   rollOver="onOver();" rollOut="onOut();"
+						   click="onClick(true)" maxHeight="45" autoDrawBackground="true">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			import com.lazyscope.entry.StreamEntry;
+			
+			public var linkID:Number = 0;
+			
+			public var urlEndpoint:String = null;
+			public var readabilityFail:Boolean = false;
+			
+			override public function set data(value:Object):void
+			{
+				if (!value) {
+					try{
+						title.text = url.text = null;
+					}catch(err:Error) {
+						trace(err.getStackTrace(), 'set data render favoriteLink fail');
+					}
+				}
+				super.data = value;
+			}
+			
+			override public function onClick(forceOpen:Boolean = false):void
+			{
+				var tmpFocusedData:StreamEntry = StreamItemRenderer.focusedData;
+				StreamItemRenderer.focusedData = null;
+				
+				Base.contentViewer.showLink(urlEndpoint, title.text, this, null, readabilityFail, forceOpen);
+				Base.contentViewer.focused = false;
+				
+				StreamItemRenderer.focusedData = tmpFocusedData;
+				var d:StreamEntry = StreamEntry(super.data);
+				callLater(function():void {selectedData=StreamEntry(d);});
+			}
+		]]>
+	</fx:Script>
+	
+	<s:Label id="title" styleName="font13" maxHeight="17" lineHeight="18" fontWeight="bold" color="0x555555" top="5" left="10" right="10" lineBreak="explicit" />
+	<s:Label id="url" height="17" styleName="font12" lineHeight="18" color="0x666666" top="23" left="10" right="10" lineBreak="explicit" />
+</stream:StreamItemRenderer>

@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx"
+		 xmlns:lazyscope="com.lazyscope.*"
+		 width="435" visible="false">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			import com.lazyscope.Util;
+			import com.lazyscope.entry.BlogEntry;
+			
+			import mx.graphics.ImageSnapshot;
+			
+			import spark.components.Image;
+//			import mx.graphics.codec.JPEGEncoder;
+			
+			public var imageCandidates:Array = null;
+			public var imageElement:Image = null;
+			
+			public var selector:ContentSnapshotSelector = null;
+			[Bindable] public var isSelected:Boolean = true;
+			
+			public var _data:BlogEntry = null;
+			public function show(e:BlogEntry):void {
+				if (data != e)
+					data = e;
+				
+				visible = true;
+				
+				
+//				takeSnapshot();
+			}
+			
+			public function hide():void {
+				visible = false;
+			}
+			
+			private function initCanvas():void {
+				imageContainer.width = imageContainer.height = 0;
+				contentContainer.width = 405;
+				contentContainer.left = 0;
+				contentContainer.top = 0;
+				description.maxHeight = 288;
+				contentContainer.visible = contentContainer.includeInLayout = true;
+				blog.visible = blog.includeInLayout = true;
+				imageElement = null;
+
+				if (imageContainer.numElements > 0)
+					imageContainer.removeAllElements();
+				
+				var screenName:String = Base.screenName;
+				capturedMessage.text = (screenName ? screenName + '\'s ' : '') + 'Lazyscope';
+				
+//dummySerial.text = String(Math.floor(Math.random()*1000000));
+			}
+			
+			public function set data(e:BlogEntry):void
+			{
+				_data = e;
+				initCanvas();
+//				
+//				trace('***LINK:', e.link);
+//				
+//				if (e.link) {
+//					if (e.link.match(/^https?:\/\/(www\.)?youtube\.com\/watch\?v=([\da-zA-Z_\-]+)/)) {
+//						trace('@@@@@@@@YOUTUBE');
+//						renderYoutube(e);
+//						return;
+//					}
+//				}
+				renderDefault(e);
+			}
+			
+//			public function renderYoutube(e:BlogEntry):void
+//			{
+//				var html:String = 'AAAAAAAAAA';
+//				
+//				defaultContainer.visible = defaultContainer.includeInLayout = false;
+//				htmlContainer.visible = htmlContainer.includeInLayout = true;
+//				try{
+//					if (htmlContainer.htmlLoader.window.setContent)
+//						htmlContainer.htmlLoader.window.setContent(html);
+//					else
+//						htmlContainer.htmlLoader.window.renderHTML = html;
+//				}catch(e:*) {}
+//			}
+			
+			public function imgComplete(event:Event):void
+			{
+				if (imgLoad(this, imageElement)) {
+					imageElement.removeEventListener(Event.COMPLETE, imgComplete);
+					imageElement.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, imgError);
+					imageElement.removeEventListener(IOErrorEvent.IO_ERROR, imgError);
+				}
+			}
+			
+			public function imgError(event:Event):void
+			{
+				if (Util.imgError(this, imageElement)) {
+					imageElement.removeEventListener(Event.COMPLETE, imgComplete);
+					imageElement.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, imgError);
+					imageElement.removeEventListener(IOErrorEvent.IO_ERROR, imgError);
+				}
+			}
+			
+			public function renderDefault(e:BlogEntry):void
+			{
+				defaultContainer.visible = defaultContainer.includeInLayout = true;
+//				htmlContainer.visible = htmlContainer.includeInLayout = false;
+				imageCandidates = Util.extractImageURL(e.displayContent?e.displayContent:e.content);
+				if (imageCandidates && imageCandidates.length > 0) {
+					if (e.image) {
+						var p:int = imageCandidates.indexOf(e.image);
+						if (p >= 0)
+							imageCandidates.splice(p, 1);
+					}else{
+						e.image = imageCandidates.shift();
+					}
+				}
+				
+				title.text = Util.htmlEntitiesDecode(e.title).replace(/\s+/g, ' ').replace(/^\s+/, '').replace(/\s+$/, '').replace(/<[^>]+>/g, '');
+				
+				blog.text = (e.blog && e.blog.title) ? e.blog.title.replace(/\s+/g, ' ').replace(/^\s+/, '').replace(/\s+$/, '').replace(/<[^>]+>/g, '') : '';
+				if (!blog.text) {
+					var m:Array = e.link ? e.link.match(/^https?:\/\/(www\.)?([^\/]+)(\/|$)/) : null;
+					blog.text = (m && m[2]) ? m[2] : '';
+				}
+				if (blog.text)
+					blog.text = 'from ' + blog.text;
+				else
+					blog.visible = blog.includeInLayout = false;
+				
+					var desc:String = e.content ? e.content : (e.description ? e.description : '');
+					if (desc)
+						desc = desc.replace(/\s+/g, ' ').replace(/(<\/?(div|p|br|li|ol|ul|table|tbody|tr))\b/ig, '__Lazyscope_NewLine__$1').replace(/<[^>]+>/g, '').replace(/__Lazyscope_NewLine__/g, '\n');
+					description.text = Util.htmlEntitiesDecode(desc).replace(/(^\s+|\s+$)/g, '').replace(/[\t ]+/g, ' ').replace(/[\s\n]*\n[\s\n]*/g, '\n\n').substr(0, 2000);
+				
+				if (!description.text)
+					contentContainer.visible = contentContainer.includeInLayout = false;
+					
+				if (e.image) {
+					var thisObj:Object = this;
+					imageElement = new Image;
+					imageElement.cachePolicy = 'on';
+					imageElement.smooth = true;
+					imageElement.source = refineImageLink(e);
+					
+					imageElement.addEventListener(Event.COMPLETE, imgComplete, false, 0, true);
+					imageElement.addEventListener(SecurityErrorEvent.SECURITY_ERROR, imgError, false, 0, true);
+					imageElement.addEventListener(IOErrorEvent.IO_ERROR, imgError, false, 0, true);
+					imageContainer.addElement(imageElement);
+				}
+			}
+			
+			public static function refineImageLink(e:BlogEntry):String
+			{
+//				trace('-----------------');
+//				trace(e.image);
+//				trace(e.displayContent);
+//				trace('-----------------');
+				if (e.link && e.link.match(/twitpic\.com/) && e.displayContent) {
+					return e.image.replace(/\/show\/thumb\/([^\.]+)(\.(jpg|png|gif))/g, '/show/full/$1$2');
+				}
+				if (e.link && e.link.match(/yfrog\.com/) && e.displayContent) {
+					return e.image.replace(/size=100/g, 'size=640').replace(/\.th\.jpg/g, '.jpg');
+				}
+				if (e.link && e.link.match(/plixi\.com/) && e.displayContent) {
+					var m:Array = e.displayContent.match(/\ssrc=\"([^\"]+)\"/);
+					if (m && m[1])
+						return m[1];
+				}
+				return e.image;
+			}
+			
+			public function get data():BlogEntry {
+				return _data;
+			}
+			
+			public function takeSnapshot():void {
+//				ImageSnapshot.defaultEncoder = JPEGEncoder;				
+				var capturedImg:ImageSnapshot = ImageSnapshot.captureImage(preview);
+//				var capturedImg:ImageSnapshot = ImageSnapshot.captureImage(Base.contentViewer.html);
+//				trace('*******', capturedImg.width, capturedImg.height);
+				//snapshotImage.source = capturedImg.data;
+			}
+			
+			public function imgLoad(o:Object, img:Image):Boolean {
+//				var maxW:Number = 405;
+				var maxW:Number = 413;
+				var maxH:Number = 600;
+//				var maxH:Number = 310;
+				var _resized:Object;
+				
+				var w:Number = img.sourceWidth;
+				var h:Number = img.sourceHeight;
+				var w2:Number = w;
+				var h2:Number = h;
+				
+				if ((w < 80 && h < 60) || w < 40 || h < 30) {
+					Util.imgError(o, img);
+				}else{
+					_resized = Util.calculateImgSize(w, h, maxW, maxH, true);
+					w = _resized.w;
+					h = _resized.h;
+					w2 = _resized.w2;
+					h2 = _resized.h2;
+					
+					if ((h2 > 250 && w2 < 210) || (h2 > 200 && w2 < 160)) {
+						img.width = w;
+						img.height = h;
+						imageContainer.width = w2;
+						imageContainer.height = h2;
+						contentContainer.width = 395 - w2;
+						contentContainer.left = w2 + 10;
+						contentContainer.top = 0;
+						return true;
+					}
+					
+					if (h2 + description.height > 590) {
+						description.maxHeight = Math.min(Math.max(Math.round((590 - h2) / 16), 8), 18) * 16;
+						maxH = 590 - description.height;
+
+						_resized = Util.calculateImgSize(img.sourceWidth, img.sourceHeight, maxW, maxH, true);
+						w = _resized.w;
+						h = _resized.h;
+						w2 = _resized.w2;
+						h2 = _resized.h2;
+						img.width = w;
+						img.height = h;
+						imageContainer.width = w2;
+						imageContainer.height = h2;
+						contentContainer.width = 405;
+						contentContainer.left = 0;
+						contentContainer.top = h2 + 10;
+						return true;
+					}
+					
+					img.width = w;
+					img.height = h;
+					
+					imageContainer.width = w2;
+					imageContainer.height = h2;
+					
+					contentContainer.width = 405;
+					contentContainer.left = 0;
+					contentContainer.top = h + 10;
+					
+//					if (w < maxW - 150) {
+//						contentContainer.width = 395 - w;
+//						contentContainer.left = w + 10;
+//						contentContainer.top = 0;
+//					}else{
+//						contentContainer.width = 405;
+//						contentContainer.left = 0;
+//						contentContainer.top = h + 10;
+//					}
+					
+					return true;
+				}
+				return false;
+			}
+		]]>
+	</fx:Script>
+	
+	<s:BorderContainer id="preview" width="435" borderWeight="1" borderColor="0xDFDFDF" backgroundColor="0xFFFFFF" visible="{isSelected}" includeInLayout="{isSelected}">
+		<!--
+		<mx:HTML id="htmlContainer" location="app:///html/PreviewViewer.html" width="433" top="0" bottom="0" left="0" right="0" visible="false" includeInLayout="false" />
+		-->
+		<s:BorderContainer id="defaultContainer" width="433" borderVisible="false" borderColor="0xFFFFFF" cornerRadius="6" backgroundColor="0xFFFFFF" top="0" bottom="0" left="0" right="0">
+			<s:BorderContainer backgroundAlpha="1" backgroundColor="0x000000" left="-1" right="-1" top="-1" height="24" borderVisible="false">
+				<s:backgroundFill>
+					<s:LinearGradient rotation="90">
+						<s:GradientEntry color="0x353535" />
+						<s:GradientEntry color="0x1C1C1C" />
+					</s:LinearGradient>
+				</s:backgroundFill>
+<!--
+				<s:Line y="12" xFrom="2" xTo="425">
+					<s:stroke>
+						<s:SolidColorStroke weight="1" color="0xCCCCCC" alpha="1.0" />
+					</s:stroke>
+				</s:Line>
+-->
+				<s:HGroup right="6" top="7" gap="4">
+					<s:Label text="Created with" fontSize="10" color="0xBABABA" />
+					<s:Label id="capturedMessage" text="Lazyscope" fontWeight="bold" fontSize="10" color="0xFFFFFE" />
+				</s:HGroup>
+			</s:BorderContainer>
+
+			<s:VGroup top="27" bottom="9" left="10" right="18" gap="5">
+				<s:HGroup width="405" left="0">
+					<s:Label id="title" width="390" fontWeight="bold" color="0x333333" fontSize="16" lineHeight="18" maxHeight="54" left="22" paddingTop="2" />
+				</s:HGroup>
+				<s:Label id="blog" width="405" fontSize="11" height="11" lineHeight="13" color="0x777777" />
+				<s:Group width="405" maxHeight="600" left="0">
+					<s:Group id="imageContainer" height="0" width="0" clipAndEnableScrolling="true" top="0" left="0" />
+					<s:VGroup id="contentContainer" left="0" top="0" width="405" clipAndEnableScrolling="true" gap="0">
+						<s:Label id="description" width="{contentContainer.width}" color="0x777777" fontSize="14" lineHeight="16" maxHeight="288" paddingTop="2" />
+						<!--
+						<s:Group id="displayDescription" width="{contentContainer.width}" />
+						-->
+					</s:VGroup>
+				</s:Group>
+			</s:VGroup>
+		</s:BorderContainer>
+		
+		<s:BorderContainer id="dummy" top="0" left="0" right="0" bottom="0" visible="false" backgroundColor="0xEEEE22">
+			<s:Label fontWeight="bold" top="20" left="20" fontSize="50" color="0x333311" text=":)" />
+			<s:Label id="dummySerial" fontWeight="bold" bottom="20" right="20" fontSize="15" color="0x994433" />
+		</s:BorderContainer>
+		
+	</s:BorderContainer>
+	
+	<!--
+	<s:Image id="snapshotImage" />
+	-->
+	
+</s:Group>

@@ -1,0 +1,381 @@
+<?xml version="1.0" encoding="utf-8"?>
+<stream:StreamItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+						   xmlns:s="library://ns.adobe.com/flex/spark" 
+						   xmlns:mx="library://ns.adobe.com/flex/mx"
+						   xmlns:lazyfeed="com.lazyfeed.*"
+						   xmlns:stream="com.lazyfeed.stream.*"
+						   xmlns:control="com.lazyfeed.control.*"
+						   minHeight="56"
+						   clipAndEnableScrolling="true">
+	<fx:Declarations>
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyfeed.Base;
+			import com.lazyfeed.CachedImage;
+			import com.lazyfeed.Util;
+			import com.lazyfeed.control.Spinner;
+			import com.lazyfeed.crawl.FeedFuncRequest;
+			import com.lazyfeed.crawl.FeedFuncRequestEvent;
+			import com.lazyfeed.entry.StreamEntry;
+			import com.lazyfeed.notifier.NotifyWindow;
+			import com.swfjunkie.tweetr.data.objects.StatusData;
+			
+			import flashx.textLayout.conversion.TextConverter;
+			import flashx.textLayout.events.FlowElementMouseEvent;
+			
+			import mx.utils.URLUtil;
+			
+			public static var loadingSpins:Array = new Array;
+			
+			public static function removeSpinner(e:StreamEntry):void
+			{
+				if (!e.renderer) return;
+				if (e.renderer.spinners.numElements > 0) {
+					var sp:Spinner = Spinner(e.renderer.spinners.getElementAt(0));
+					e.renderer.spinners.removeElement(sp);
+					sp.stop();
+					loadingSpins.push(sp);
+				}
+			}
+			
+			public static function addSpinner(e:StreamEntry):void
+			{
+				if (!e.renderer || e.renderer.spinners.numElements > 0) return;
+				var spinner:Spinner = Spinner(loadingSpins.shift());
+				if(!spinner) {
+					spinner = new Spinner;
+				}
+				e.renderer.spinners.addElement(spinner);
+				spinner.start();
+			}
+			
+			public static function getContent(e:StreamEntry, isUpdated:Boolean=false):void
+			{
+				if (e.childRequesting) return;
+				e.childRequesting = true;
+				
+				var st:StatusData = e.twitStatus.retweetedStatus ? e.twitStatus.retweetedStatus : e.twitStatus;
+				if (!st.links || st.links.length <= 0) {
+					e.childRequesting = false;
+					return;
+				}
+				
+				e._todoLinkCount = !isNaN(e._todoLinkCount) ? e._todoLinkCount : st.links.length;
+				getContent2(e, 'status', st.links, isUpdated);
+			}
+			
+			/*
+			public static function clearHighlight2(obj:Object):void
+			{
+			var e:StreamEntry = obj.data as StreamEntry;
+			if (e && e.child && e.child.numElements > 0) {
+			for (var i:Number=0; i < e.child.numElements; i++) {
+			var el:Object = e.child.getElementAt(i);
+			if (el is StreamItemRendererBlogInTwitter)
+			el.clearHighlight();
+			else if (el is StreamItemRendererTwitterFail)
+			el.setStyle('alternatingItemColors', bgcolor);
+			}
+			}
+			}
+			*/
+			
+			public static function getContentSuccess(event:FeedFuncRequestEvent):void
+			{
+				if (event.req) {
+					event.req.removeEventListener(FeedFuncRequestEvent.SUCCESS, getContentSuccess);
+					event.req.removeEventListener(FeedFuncRequestEvent.FAIL, getContentFail);
+					event.req = null;
+				}
+				
+				if (!event.userData) return;
+				var e:StreamEntry = event.userData.streamEntry;
+				var type:String = event.userData.type;
+				var links:Array = event.userData.links;
+				event.userData = null;
+				
+				//url:String, urlEndpoint:String, entry:BlogEntry, userData:Object
+				if (e && e.child) {
+					var se:StreamEntry = StreamEntry.blog(event.entry);
+					
+					// to eliminate snapshot link
+					var host:String = URLUtil.getServerName(se.link);
+					if (host.match(/\btwitpic\.com$/) && se.description && se.description.match(/This preview was created using http:\/\/lazyscope\.com\/snap/)) {
+						e._todoLinkCount--;
+						if (e.child.numChildren >= e._todoLinkCount)
+							removeSpinner(e);
+						se.destroy();
+						return;
+					}
+					
+					var v:StreamItemRendererBlogInTwitter = new StreamItemRendererBlogInTwitter;
+					v.data = se;
+					
+//					v.width = 326;
+					v.width = NaN;
+					v.percentWidth = 100;
+					
+					e.child.addElement(v);
+					
+					//					if (e.child.numChildren >= links.length)
+					if (e.child.numChildren >= e._todoLinkCount)
+						removeSpinner(e);
+					
+					// for Notifier
+					if (type == 'status' && e.twitStatus && e.twitStatus.id) {
+						NotifyWindow.notifyEmbeddedContent(e.twitStatus.id, se);
+					}else if (type == 'message' && e.twitMsg && e.twitMsg.id) {
+						NotifyWindow.notifyEmbeddedContent(e.twitMsg.id, se);
+					}
+				}
+				
+			}
+			
+			public static function getContentFail(event:FeedFuncRequestEvent):void
+			{
+				if (!event) return;
+				if (event.req) {
+					event.req.removeEventListener(FeedFuncRequestEvent.SUCCESS, getContentSuccess);
+					event.req.removeEventListener(FeedFuncRequestEvent.FAIL, getContentFail);
+					event.req = null;
+				}
+				
+				if (!event.userData) return;
+				var e:StreamEntry = event.userData.streamEntry;
+				if (!e || !e.child) return;
+				event.userData = null;
+				
+				var fail:StreamItemRendererTwitterFail = new StreamItemRendererTwitterFail;
+				
+				fail.title.text = (event.title ? event.title : (event.url?event.url:'')).replace(/^\s+/, '').replace(/\s+$/, '').replace(/\s+/, ' ').replace(/<[^>]+>/g, '');
+				
+				fail.url.text = event.url ? event.url.replace(/^\s+/, '').replace(/\s+$/, '').replace(/\s+/, ' ') : '';
+				fail.urlEndpoint = event.urlEndpoint ? event.urlEndpoint.replace(/^\s+/, '').replace(/\s+$/, '').replace(/\s+/, ' ') : '';
+				fail.readabilityFail = event.readabilityFail;
+				
+				var failEntry:StreamEntry = new StreamEntry;
+				failEntry.type = 'B';
+				failEntry.link = fail.url.text;
+				failEntry.title = fail.title.text;
+				fail.data = failEntry;
+				
+				fail.width = NaN;
+				fail.percentWidth = 100;
+				
+				if (e.child) {
+					e.child.addElement(fail);
+					
+					if (e.child.numChildren >= e._todoLinkCount)
+						removeSpinner(e);
+				}
+			}
+			
+			public static function getContent2(e:StreamEntry, type:String, links:Array, isUpdated:Boolean=false):void
+			{
+				if (!e.child) {
+					e.child = new VGroup;
+					e.child.width = NaN;
+					e.child.percentWidth = 100;
+					e.child.gap = 0;
+				}
+				
+				
+				for (var i:Number=0; i < links.length; i++) {
+					if (!links[i]) continue;
+					
+					addSpinner(e);
+					
+					var req:FeedFuncRequest = new FeedFuncRequest(links[i], {streamEntry:e, type:type, links:links}, isUpdated);
+					req.addEventListener(FeedFuncRequestEvent.SUCCESS, getContentSuccess, false, 0, true);
+					req.addEventListener(FeedFuncRequestEvent.FAIL, getContentFail, false, 0, true);
+					req.run();
+				}
+			}
+			
+			private var userLink:String;
+			private var retweetUserLink:String;
+			private var inReplyToID:String;
+			
+			public static function __data(obj:TweetRendererTwitterInUserInfo, e:StreamEntry):void
+			{
+				try{
+					obj.opaqueBackground = e.isUpdated?0xF4FAFD:null;
+					
+					var st:StatusData = e.twitStatus.retweetedStatus ? e.twitStatus.retweetedStatus : e.twitStatus;
+					
+					//					obj.timeStr.text = Util.toIntervalString(st.published/1000);
+					obj.timeStr.text = Util.toIntervalString(st.publishedDisplay/1000);
+					
+					if (!e.imageElement) {
+						e.imageElement = new CachedImage;
+						//e.imageElement.noCustomDownload = true;
+						e.imageElement.width = e.imageElement.height = 48;
+						e.imageElement.source = st.user.profileImageUrl;
+					}
+					obj.image.addElement(e.imageElement);
+					//e.imageElement = null;
+					
+					e.renderer = obj;
+					
+					var value:String = Util.trim(st.text, true);
+					value = Util.convertFromHTML(value.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+					if (value.match(/((^|[\s\(\)\{\}\[\]\+\=\<\>\-:"',\.!\?\/])@)([a-zA-Z0-9_]+)/)) {
+						value = value.replace(/((^|[\s\(\)\{\}\[\]\+\=\<\>\-:"',\.!\?\/])@)([a-zA-Z0-9_]+)/g, '$1<a href="$3">$3</a>');
+						obj.text.textFlow = TextConverter.importToFlow(value, TextConverter.TEXT_FIELD_HTML_FORMAT, Util.styling);
+						obj.text.textFlow.addEventListener(FlowElementMouseEvent.CLICK, linkHandler, false, 100, true);
+					}else{
+						obj.text.text = value;
+					}
+					
+					obj.userName.text = st.user.screenName;
+					obj.userLink = 'http://twitter.com/' + st.user.screenName;
+					
+					if (e.twitStatus.retweetedStatus) {
+						obj.retweetUserLink = 'http://twitter.com/' + e.twitStatus.user.screenName;
+						obj.retweetUserName.text = e.twitStatus.user.screenName;
+						obj.retweetContainer.visible = obj.retweetContainer.includeInLayout = true;
+					}else{
+						obj.retweetUserLink = null;
+						obj.retweetContainer.visible = obj.retweetContainer.includeInLayout = false;
+					}
+					
+					if (obj.entryChild.numElements > 0)
+						obj.entryChild.removeAllElements();
+					
+					if (!e.child && !e.childRequesting && st.links.length > 0) {
+						getContent(e);
+					}
+					
+					if (e.child) {
+						obj.entryChild.addElement(e.child);
+						//						if (e.child.numChildren + obj.spinners.numElements < st.links.length) {
+						if (e.child.numChildren + obj.spinners.numElements < e._todoLinkCount) {
+							for (var i:Number=st.links.length-(e.child.numChildren + obj.spinners.numElements); i--;)
+								addSpinner(e);
+						}
+					}
+					
+					obj.iconProtected.visible = obj.iconProtected.includeInLayout = st.user.profileProtected;
+					
+					if (st.inReplyToStatusId && st.inReplyToScreenName) {
+						obj.inReplyToID = st.inReplyToStatusId;
+						obj.inReplyTo.text = 'in reply to @' + st.inReplyToScreenName;
+						
+						obj.inReplyTo.visible = obj.inReplyTo.includeInLayout = true;
+					}else{
+						obj.inReplyToID = null;
+						obj.inReplyTo.visible = obj.inReplyTo.includeInLayout = false;
+					}
+					
+					if (StreamItemRenderer.focusedData == e && e.renderer)
+						StreamItemRenderer.onFocusIn(e.renderer, false);
+				}catch(e:Error){
+					trace(e.getStackTrace(), '__data render tw');
+				}
+			}
+			
+			override public function set data(value:Object):void
+			{
+				if (super.data == value) return;
+				if (!value) {
+					super.data = value;
+					return;
+				}
+				
+				try{
+					var e:StreamEntry;
+					e = value as StreamEntry;
+					if (super.data && StreamEntry(super.data).sid == e.sid) {
+						trace('same!!!!!!!!!!!!!!!');
+						return;
+					}
+					
+					if (!e.twitStatus || !e.twitStatus.user) return;
+					
+					super.data = value;
+					
+					__data(this, e);
+				}catch(error:Error) {
+					trace(error.getStackTrace(), 'set data render tw2');
+				}
+			}
+			
+			public static function userName_rollOverHandler(event:MouseEvent):void
+			{
+				event.target.setStyle('color', '0x0279B4');
+			}
+			
+			
+			public static function userName_rollOutHandler(event:MouseEvent, type:String):void
+			{
+				event.target.setStyle('color', type == 'time'?'0x999999':'0x333333');
+			}
+			
+			protected static function timeStr_clickHandler(userLink:String, id:String):void
+			{
+				Base.navigateInBrowser(userLink+'/status/'+(id));
+			}
+		]]>
+	</fx:Script>
+	
+	<s:VGroup width="100%" top="8" bottom="0" gap="0">
+		<s:Group id="tweetContainer" width="100%">
+			<s:Group id="image" width="48" height="48" left="10">
+				<s:filters>
+					<s:DropShadowFilter distance="1" blurX="4" angle="90" alpha="0.75" />
+				</s:filters>
+				<s:mask>
+					<s:Graphic>
+						<s:Rect width="48" height="48" radiusX="4">
+							<s:fill>
+								<s:SolidColor color="0xFFFFFF" />
+							</s:fill>
+						</s:Rect>
+					</s:Graphic>
+				</s:mask>
+			</s:Group>
+			<!--
+			<s:BorderContainer alpha="0" width="48" height="48" left="10" top="0" click="Base.navigateInBrowser(userLink)" mouseChildren="true" useHandCursor="true" buttonMode="true" />
+			-->
+			<s:BorderContainer alpha="0" width="48" height="48" left="10" top="0" click="Base.userViewer.displayUser(userName.text)" mouseChildren="true" useHandCursor="true" buttonMode="true" />
+			
+			<s:VGroup left="68" right="12">
+				<s:RichEditableText editable="false" id="text" width="100%" maxHeight="100" styleName="font13" color="0x444444" />
+				<s:VGroup width="100%" gap="3">
+					<s:HGroup width="100%" verticalAlign="bottom" clipAndEnableScrolling="true">
+						<lazyfeed:CachedImage id="iconProtected" source="img/icon_protected_8x10.png" width="8" height="10" visible="false" includeInLayout="false" />
+						<!--
+						<s:Label id="userName" fontWeight="bold" styleName="font12" color="0x333333" fontFamily="Helvetica" useHandCursor="true" mouseChildren="true" buttonMode="true" click="Base.navigateInBrowser(userLink)" rollOver="userName_rollOverHandler(event)" rollOut="userName_rollOutHandler(event, 'name')" />
+						-->
+						<s:Label id="userName" fontWeight="bold" styleName="font12" color="0x333333" fontFamily="Helvetica" useHandCursor="true" mouseChildren="true" buttonMode="true" click="Base.userViewer.displayUser(userName.text)" rollOver="userName_rollOverHandler(event)" rollOut="userName_rollOutHandler(event, 'name')" />
+						<s:Label id="timeStr" styleName="font11" color="0x999999" rollOver="userName_rollOverHandler(event)" rollOut="userName_rollOutHandler(event, 'time')" click="timeStr_clickHandler(userLink, data.twitStatus.id)" useHandCursor="true" buttonMode="true" />
+						<s:Group id="spinners" width="13" height="9" clipAndEnableScrolling="true" />
+					</s:HGroup>
+					<s:HGroup id="retweetContainer" visible="false" includeInLayout="false">
+						<lazyfeed:CachedImage source="img/icon_retweet.png" width="14" height="8" alpha="0.6" />
+						<s:Label text="by" color="0x999999" />
+						<!--
+						<s:Label id="retweetUserName" styleName="font12" color="0x0279B4" fontFamily="Helvetica" useHandCursor="true" mouseChildren="true" buttonMode="true" click="Base.navigateInBrowser(retweetUserLink)" />
+						-->
+						<s:Label id="retweetUserName" styleName="font12" color="0x0279B4" fontFamily="Helvetica" useHandCursor="true" mouseChildren="true" buttonMode="true" click="Base.userViewer.displayUser(retweetUserName.text)" />
+					</s:HGroup>
+					<s:Label id="inReplyTo" visible="false" includeInLayout="false" styleName="font11" paddingTop="2" color="0x666666" rollOver="inReplyTo.setStyle('color', 0x0279B4)" rollOut="inReplyTo.setStyle('color', 0x666666)" fontFamily="Helvetica" useHandCursor="true" mouseChildren="true" buttonMode="true" click="Base.tweetViewer.displayTweet(inReplyToID, super.data ? StreamEntry(super.data).twitStatus : null)" />
+				</s:VGroup>
+			</s:VGroup>
+		</s:Group>
+		
+		<mx:Spacer height="4" />
+		
+		<s:VGroup id="entryChild" width="100%" clipAndEnableScrolling="true" />
+		
+		<s:Group id="btns" width="100%" includeInLayout="false" />
+	</s:VGroup>
+	
+	<s:Line id="bottomLine" left="0" width="100%" bottom="0">
+		<s:stroke>
+			<s:SolidColorStroke color="0xAAAAAA" />
+		</s:stroke>
+	</s:Line>
+</stream:StreamItemRenderer>

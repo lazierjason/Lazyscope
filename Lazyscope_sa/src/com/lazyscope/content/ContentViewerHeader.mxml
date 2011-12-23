@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  xmlns:mx="library://ns.adobe.com/flex/mx"
+		  creationComplete="onCreationComplete(event)" borderVisible="false"
+		  backgroundColor="0xE4E4DA" xmlns:content="com.lazyscope.content.*" xmlns:lazyscope="com.lazyscope.*">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			//import com.lazyscope.DataServer;
+			import com.lazyscope.UIFrame;
+			import com.lazyscope.Util;
+			import com.lazyscope.control.PreviewBtn;
+			import com.lazyscope.entry.Blog;
+			import com.lazyscope.entry.BlogEntry;
+			
+			import flashx.textLayout.events.FlowElementMouseEvent;
+			
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			import mx.utils.URLUtil;
+
+			public var _link:String;
+			
+			public function set link(value:String):void
+			{
+				_link = value;
+				
+				favicon.htmlLoader.useCache = true;
+				favicon.htmlLoader.cacheResponse = true;
+
+				if (_link) {
+					favicon.domWindow.faviconElement.src='../icon/blank.gif';
+					setTimeout(function():void {
+						favicon.domWindow.faviconElement.src='http://'+(URLUtil.getServerName(_link))+'/favicon.ico';
+					}, 0);
+				}
+			}
+			
+			public function get link():String
+			{
+				return _link;
+			}
+			
+			public function onCreationComplete(event:Event):void
+			{
+			}
+
+			protected function linkelement1_clickHandler(event:FlowElementMouseEvent):void
+			{
+				if (link) {
+					var val:URLVariables = new URLVariables;
+					val.link = link;
+					//DataServer.request('RQ', val.toString());
+				}
+
+				Util.isShowingAlert = true;
+				Alert.show('Thank you!', '', Alert.OK, Base.app, function(event:CloseEvent):void{
+					Util.isShowingAlert = false;
+				});
+			}
+
+
+			protected function button1_clickHandler(event:MouseEvent):void
+			{
+				if (link) {
+					var r:Readability = new Readability(link);
+					r.analyze(function(e:BlogEntry):void {
+						if (e && e.link == link) {
+							Base.contentViewer.html.domWindow.ContentViewer.showReadability(e.content);
+						}else{
+							Util.isShowingAlert = true;
+							Alert.show('', 'Readability fail', Alert.OK, Base.app, function(event:CloseEvent):void{
+								Util.isShowingAlert = false;
+							});
+						}
+					}, null, null);
+				}
+			}
+			
+			protected function btnCloseClick():void
+			{
+				if (Base.contentViewer.lastDisplayNode) {
+					Base.contentViewer.lastDisplayNode.selected = false;
+					Base.contentViewer.lastDisplayNode = null;
+					Base.contentViewer.data = null;
+				}
+				PreviewBtn.BTN.toOpen = true;
+				UIFrame.hideContentFrame();
+			}
+
+		]]>
+	</fx:Script>
+	
+	<mx:HTML id="favicon" width="16" height="16" top="10" left="0" location="html/favicon.html" paintsDefaultBackground="false" cachePolicy="on" />
+	<s:Label id="blog" width="100%" height="18" color="0x333333" fontFamily="Helvetica" fontSize="16" top="12" left="22" right="58" lineBreak="explicit" />
+	<s:Label id="blogLink" top="38" left="0" right="58" height="15" fontSize="13" color="0x999999" fontFamily="Helvetica" lineBreak="explicit" />
+	
+	<!--
+	<s:Image id="btnClose" source="app:///button/btn_close_viewer.png" width="50" height="50" top="4" right="4" useHandCursor="true" buttonMode="true" click="btnCloseClick()" />
+	-->
+	
+	<!-- <s:Button id="btnReadability" click="button1_clickHandler(event)" label="R!" right="50" visible="false" /> -->
+	
+	<!-- <content:SubscribeButton id="btnSubscribe" top="33" left="0" /> -->
+	<s:RichEditableText id="requestFeed" editable="false" top="37" left="0" right="0" fontSize="13" fontFamily="Helvetica" visible="false" includeInLayout="false">
+		<s:span color="0x444444" text="Tell the Publisher! " />
+		<s:a click="linkelement1_clickHandler(event)">
+			<s:span text="I’d like to subscribe to this website on Lazyscope" color="0x0279B4" />
+		</s:a>
+	</s:RichEditableText>
+	
+</s:BorderContainer>

@@ -1,0 +1,1294 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lazyscope:Base xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		   xmlns:s="library://ns.adobe.com/flex/spark" 
+		   xmlns:twitter="com.lazyscope.twitter.*"
+		   xmlns:mx="library://ns.adobe.com/flex/mx"  
+		   xmlns:stream="com.lazyscope.stream.*"
+		   xmlns:lazyscope="com.lazyscope.*"
+		   width="375" height="100%" 
+		   creationComplete="onCreationComplete(event)"
+		   mouseMove="base1_mouseMoveHandler(event)"
+		   >
+
+	<fx:Script>
+		<![CDATA[
+			import air.net.SocketMonitor;
+			
+			import com.lazyscope.ConfigDB;
+			//import com.lazyscope.DataServer;
+			import com.lazyscope.UIFrame;
+			import com.lazyscope.URL;
+			import com.lazyscope.Util;
+			import com.lazyscope.content.Content;
+			import com.lazyscope.control.Spinner;
+			import com.lazyscope.entry.Blog;
+			import com.lazyscope.entry.BlogEntry;
+			import com.lazyscope.entry.FavoriteLink;
+			import com.lazyscope.entry.StreamEntry;
+			import com.lazyscope.twitter.TweetWindow;
+			import com.lazyscope.twitter.TwitterStreamEvent;
+			import com.lazyscope.twitter.TwitterStreamOption;
+			import com.swfjunkie.tweetr.data.objects.DirectMessageData;
+			import com.swfjunkie.tweetr.data.objects.ListData;
+			import com.swfjunkie.tweetr.data.objects.StatusData;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.collections.Sort;
+			import mx.collections.SortField;
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			import mx.events.EffectEvent;
+			
+			import spark.components.Label;
+			import spark.effects.Resize;
+			import spark.effects.easing.Power;
+			
+			
+			public var timeLastUpdate:Number;
+			
+			public var stream:StreamList;
+			//public var notifier:StreamNotifier;
+			public var errorMsg:StreamErrorMsg;
+			public var loading:Spinner;
+			public var emptyMsg:Label;
+			
+			public static var updateTwitterInterval:Number = 60000;
+			private static var updateTwitterTimer:uint;
+			
+			private var updatedTweets:ArrayCollection;
+			public static function initTwitterAPIInterval():void
+			{
+				var conf:String = ConfigDB.get('lf_twapi_setting');
+				
+				updateTwitterInterval = conf?Number(conf):60000;
+				updateTwitterTimer = setTimeout(updateTwitter, updateTwitterInterval);
+			}
+			
+			public static function setTwitterAPIInterval(min:Number):void
+			{
+				updateTwitterInterval = Math.max(min, 1)*60000;
+				
+				ConfigDB.set('lf_twapi_setting', updateTwitterInterval.toString());
+				
+				clearTimeout(updateTwitterTimer);
+				updateTwitterTimer = setTimeout(updateTwitter, updateTwitterInterval);
+			}
+			
+			public static function updateTwitter(isImmediateTweet:Boolean=false):void
+			{
+				updateTwitterTimer = setTimeout(updateTwitter, updateTwitterInterval);
+				Base.stream._updateTwitter(isImmediateTweet);
+			}
+
+			private function onCreationComplete(event:Event):void
+			{
+				//stream = StreamList.session();
+				
+				registerHandler();
+				
+				setTimeout(updateBlog, 10000);
+				setTimeout(updateLinkFavorites, 10000);
+				
+				stream.addEventListener(MouseEvent.MOUSE_WHEEL, onScroll, false, 0, true);
+				stream.scroller.verticalScrollBar.addEventListener(MouseEvent.MOUSE_UP, onScroll, false, 0, true);
+				
+				addEventListener(Event.COMPLETE, streamEventCallback, false, 0, true);
+				
+				twitterUpdater.addEventListener(TwitterStreamEvent.STATUS, twitterUpdated, false, 0, true);
+				twitterUpdater.addEventListener(TwitterStreamEvent.FAVORITE, twitterUpdated, false, 0, true);
+				twitterUpdater.addEventListener(TwitterStreamEvent.DIRECT_MESSAGE, twitterUpdated, false, 0, true);
+				twitterUpdater.addEventListener(TwitterStreamEvent.MENTION, twitterUpdated, false, 0, true);
+				
+				mon.pollInterval = 500;
+				mon.addEventListener(StatusEvent.STATUS, wakeupCheckFunc, false, 0, true);
+				
+				updatedTweets = new ArrayCollection;
+				updatedTweets.sort = new Sort;
+				updatedTweets.sort.fields = [new SortField('pushTime')];
+				updatedTweets.refresh();
+			}
+			
+			private var _prevEvents:Object = {};
+			private function streamEventCallback(event:StreamEvent):void
+			{
+				//trace('streamEventCallback', event);
+				if (event.complete == StreamEvent.SELECTOR_CHANGE) {
+					_prevEvents = {};
+					return;
+				}
+				
+				if (_prevEvents.finish) {
+					if (stream.hasData())
+						emptyMsg.visible = false;
+					return;
+				}
+				
+				var finish:Boolean = false;
+				switch (filterType) {
+					case 1:		//following
+						if (event.complete == StreamEvent.BLOG_COLLECTION_COMPLETE || event.complete == StreamEvent.TWITTER_COMPLETE)
+							_prevEvents[event.complete] = true;
+						if (_prevEvents[StreamEvent.BLOG_COLLECTION_COMPLETE] && _prevEvents[StreamEvent.TWITTER_COMPLETE]) {
+							//finish
+							finish = true;
+						}
+						break;
+					case 2:		//my tweets
+					case 4:		//my list
+					case 5:		//subscription
+					case 8:		//mention
+					case 9:		//dm
+						if (event.complete == StreamEvent.TWITTER_COMPLETE) {
+							//finish
+							finish = true;
+						}
+						break;
+					case 10:	//favorite
+						if (event.complete == StreamEvent.LINK_FAVORITE_COMPLETE || event.complete == StreamEvent.TWITTER_COMPLETE)
+							_prevEvents[event.complete] = true;
+						if (_prevEvents[StreamEvent.LINK_FAVORITE_COMPLETE] && _prevEvents[StreamEvent.TWITTER_COMPLETE]) {
+							//finish
+							finish = true;
+						}
+						break;
+					case 7:		//blog
+						if (event.complete == StreamEvent.BLOG_COMPLETE) {
+							//finish
+							finish = true;
+						}
+						break;
+				}
+				
+				if (finish) {		// Stream loading is completed!
+//trace('-=-=-=-=-=- Stream Loading is completed! -=-=-=-=-=-');
+					_prevEvents.finish = true;
+
+					/*
+					loading.visible = false;
+					loading.stop();
+					*/
+					
+					callLater(function():void {
+						if (!stream.hasData()) {		// Stream is empty!
+							emptyMsg.visible = true;
+						}else{
+							clearTimeout(stream._addItemTimer);
+							stream.importItem();
+							
+							try{
+								if (stream.data.length > 0) {
+									var e:StreamEntry = StreamEntry(stream.data.getItemAt(0));
+									if (e) {
+										stream.ensureIndexIsVisible(0);
+										stream.validate();
+										if (e.renderer)
+											StreamItemRenderer.onFocusIn(e.renderer);
+									}
+								}
+							}catch(e:Error) {
+								trace(e.getStackTrace(), 'streamEventCallback');
+							}
+							Base.contentViewer.focused = false;
+						}
+					});
+				}
+			}
+			
+			private var scrollTimerTwitter:uint;
+			public function onScroll(event:Event):void
+			{
+				clearTimeout(scrollTimerTwitter);
+				scrollTimerTwitter = setTimeout(getMoreTwitter, 100);
+				
+				if (stream.animate && stream.animate.isPlaying)
+					stream.animate.stop();
+				
+				/*
+				if (stream.scroller.viewport.verticalScrollPosition <= 0 && notifier.visible)
+					notifier.clear();
+				*/
+			}
+			
+			private var wakeupTimer:uint;
+			public var wakeupLast:Number;
+			override protected function twitterComplete(event:Event):void
+			{
+				filterType = 1;
+				
+				callLater(function():void {
+					twitterUpdater.reset();
+					twitterUpdater.start(twitter.oauth);
+					
+					stream.setFocus();
+					
+					
+					
+					TweetWindow.snapshotEnabled = true;
+					TweetWindow.snapshotDone = true;
+					/*
+					TweetWindow.snapshotEnabled = ConfigDB.get('snapshotE'+(twitter.userid)) == 't';
+					TweetWindow.snapshotDone = ConfigDB.get('snapshotD'+(twitter.userid)) == 't';
+					*/
+					
+					
+					
+					
+					/*
+					if (ConfigDB.get('importOPML'+(twitter.userid)) != 't') {
+						Base.showOPMLImport();
+						ConfigDB.set('importOPML'+(twitter.userid), 't');
+					}
+					*/
+				});
+				
+				initStream();
+				
+				sidebar.showHome();
+				
+				clearTimeout(wakeupTimer);
+				wakeupLast = new Date().getTime();
+				
+				wakeupTimer = setTimeout(wakeupCheck, 1000*30);
+				
+				//UIFrame.showContentFrame();
+				sidebar.twitterComplete();
+			}
+
+			public function wakeupCheckFunc(event:StatusEvent):void
+			{
+				//trace(event);
+				if (mon.available) {
+					mon.stop();
+					setTimeout(twitterComplete, 500, null);
+				}
+			}
+			
+			public function refresh():void
+			{
+				trace('streamContainer.refresh');
+				twitterCancel(null);
+				
+				if (!mon.running)
+					mon.start();
+			}
+			
+			private var mon:SocketMonitor = new SocketMonitor('ds.lazyscope.com', 29115);
+			public function wakeupCheck():void
+			{
+				if (!twitter.ready) return;
+				var last:Number = new Date().getTime();
+				
+				if (last > wakeupLast+(1000*90)) {
+					//timeout. maybe waked up
+					refresh();
+					return;
+				}
+				wakeupLast = last;
+				
+				clearTimeout(wakeupTimer);
+				wakeupTimer = setTimeout(wakeupCheck, 1000*30);
+			}
+			
+			public function initStream():void
+			{
+				_prevEvents = {};
+				
+				timeLastUpdate = new Date().getTime();
+				
+				initialImportTwitter('tweet');
+				
+				setTimeout(fetchTwitter, 500, 8);
+				setTimeout(fetchTwitter, 1000, 9);
+				setTimeout(fetchTwitter, 1500, 10);
+//				fetchTwitter(8);
+//				fetchTwitter(9);
+//				fetchTwitter(10);
+
+				fetchBlogs();
+				
+				fetchLinkFavorites();
+				
+				/*
+				loading.visible = true;
+				loading.start();
+				*/
+				
+				emptyMsg.visible = false;
+			}
+			
+			override protected function twitterCancel(event:Event):void
+			{
+				clearTimeout(wakeupTimer);
+				
+				deleteAllData();
+				if (event) {
+					Base.contentViewer.visible = false;
+				}
+				
+				twitterUpdater.reset();
+				twitterUpdater.stop();
+				
+				sidebar.twitterCancel();
+			}
+			
+			public function truncate():void
+			{
+				errorMsg.hideMsg();
+				stream.truncate();
+				updatedTweetsClear();
+				
+				twitterUpdater.resetList();
+				
+				//notifier.clear();
+			}
+			
+			public function deleteAllData():void
+			{
+				truncate();
+				
+				for (var i:Number=0; i < blogList.length; i++) {
+					if (Blog(blogList[i]).entries)
+						Blog(blogList[i]).entries.removeAll();
+				}
+				blogList.splice(0, blogList.length);
+				
+				favoriteLinkList.removeAll();
+				favoriteLinkListHash = new Object;
+			}
+			
+			public function selectorChanged():void
+			{
+				truncate();
+				
+				timeLastUpdate = new Date().getTime();
+				
+				/*
+				loading.visible = true;
+				loading.start();
+				*/
+				emptyMsg.visible = false;
+				
+				dispatchEvent(new StreamEvent(Event.COMPLETE, false, false, StreamEvent.SELECTOR_CHANGE));
+				
+				switch (filterType) {
+					case 1:		//following
+						for (var i:Number=0; i < blogList.length; i++)
+							addBlog(Blog(blogList[i]), true);
+						dispatchEvent(new StreamEvent(Event.COMPLETE, false, false, StreamEvent.BLOG_COLLECTION_COMPLETE));
+					case 2:		//my tweets
+						initialImportTwitter('tweet');
+						break;
+					case 4:		//my list
+					case 5:		//subscription
+						fetchTwitter();
+						break;
+					case 7:		//blog
+						var b:Blog = feed.isSubscribed(filterLink?filterLink:null);
+						if (b)
+							addBlog(b);
+						break;
+					case 8:
+						sidebar.alertNotificationClear();
+						initialImportTwitter('mention');
+						break;
+					case 9:
+						sidebar.alertMessageClear();
+						initialImportTwitter('dm');
+						break;
+					case 10:
+						/*
+						ConfigDB.set('notice_favorite', 'f');	//TODO: delete
+						if (ConfigDB.get('notice_favorite') != 't') {
+							NoticePanel.show('New feature: Favorite', '<p><a href="http://www.lazyscope.com/bookmarklet.php?u='+(twitter.userid)+'">Install bookmarklet</a></p>');
+							ConfigDB.set('notice_favorite', 't');
+						}
+						*/
+						sidebar.alertFavoriteClear();
+						fetchLinkFavorites();
+						addFavoriteLink();
+						initialImportTwitter('favorite');
+						break;
+				}
+				
+				Base.userViewer.hide();
+				Base.tweetViewer.hide();
+			}
+			
+			protected function fetchBlogs():void
+			{
+				if (!db.init || !twitter.ready) {
+					setTimeout(fetchBlogs, 10);
+					return;
+				}
+				
+				blogList.splice(0, blogList.length);
+				
+				/*
+				DataServer.request('CS', 'user='+(userid)+'&v='+(Util.getVersion()), function(val:URLVariables):void {
+					if (val != null) {
+						var i:Number=0;
+						var selectorData:ArrayList = new ArrayList;
+						var processedLinks:Array = new Array;
+						var aLink:String;
+						while (val['blog'+i+'[feedlink]']) {
+							aLink = URL.normalize(val['blog'+i+'[feedlink]']);
+							if (processedLinks.indexOf(aLink) >= 0) {
+								i++;
+								continue;
+							}
+							processedLinks.push(aLink);
+							
+							var blog:Blog = new Blog(
+								val['blog'+i+'[link]'],
+								aLink,
+								val['blog'+i+'[title]'],
+								val['blog'+i+'[description]'],
+								val['blog'+i+'[profileimage]']
+							);
+							blogList.push(blog);
+							
+							selectorData.addItem({type:7, name:blog.title, feedlink:blog.feedlink, data:blog});
+							db.execute('INSERT INTO p4_subscribe(user, feedlink) values(:userid, :feedlink)', {':userid':twitter.userid, ':feedlink':blog.feedlink});
+							
+							i++;
+						}
+						callLater(function():void {
+							sidebar.addSites(selectorData);
+							
+							var t:Number = new Date().getTime();
+							DataServer.request('CE', 'user='+(userid), function(res:URLVariables):void {
+								var i:Number = 1;
+								
+								var b:Blog = null;
+								while (res && res['entry'+i+'[blog_feedlink]']) {
+									if (!b || b.link != res['entry'+i+'[blog_feedlink]']) {
+										b = feed.isSubscribed(res['entry'+i+'[blog_feedlink]']);
+										if (!b) {
+											i++;
+											continue;
+										}
+									}
+									
+									var entry:BlogEntry = new BlogEntry;
+									entry.blog = b;
+									
+									entry.id = -1;
+									entry.link = URL.normalize(res['entry'+i+'[link]']);
+									entry.title = res['entry'+i+'[title]'];
+									entry.description = res['entry'+i+'[description]'];
+									entry.content = res['entry'+i+'[content]'];
+									entry.published.setTime(res['entry'+i+'[published]']+'000');
+									if (res['entry'+i+'[category]'] != null)
+										entry.category = res['entry'+i+'[category]'].toString().split('	');
+									entry.image = res['entry'+i+'[image]'];
+									entry.video = res['entry'+i+'[video]'];
+									entry.confirm = res['entry'+i+'[confirm]'] == 't'?true:false;
+									entry.source = 'lf';
+									entry.service = res['entry'+i+'[service]'];
+									
+									//BlogEntry.register(entry);
+									
+									Content.expect(entry);
+									
+									feed.addBlogEntry(entry);
+									
+									i++;
+								}
+								
+								dispatchEvent(new StreamEvent(Event.COMPLETE, false, false, StreamEvent.BLOG_COLLECTION_COMPLETE));
+							}, true, true);
+						});
+					}else
+						dispatchEvent(new StreamEvent(Event.COMPLETE, false, false, StreamEvent.BLOG_COLLECTION_COMPLETE));
+				});
+				*/
+				
+			}
+			
+			protected function fetchLinkFavorites(maxTime:Number=0, minTime:Number=0, isUpdate:Boolean=false):void
+			{
+				if (!twitter.ready) {
+					setTimeout(fetchLinkFavorites, 10);
+					return;
+				}
+				var opt:TwitterStreamOption = twitterUpdater.getStreamOption('favorite');
+				//trace('fetchLinkFavorites', opt);
+				if (!opt) return;
+				
+				if (minTime <= 0 && (opt.fetching2 || opt.EOL2)) return;
+				if (minTime <= 0) opt.fetching2 = true;
+				
+				/*
+				DataServer.request('FL', 'id='+(twitter.userid)+(maxTime > 0?'&max_time='+maxTime:'')+(minTime > 0?'&min_time='+minTime:''), function(val:URLVariables):void {
+					//trace(val);
+					if (minTime <= 0) opt.fetching2 = false;
+					if (val != null) {
+						var i:Number=0;
+						var processedLinks:Array = new Array;
+						var aLink:String;
+						//trace(val);
+						while (val['favorite'+i+'[link]']) {
+							aLink = URL.normalize(val['favorite'+i+'[link]']);
+							if (processedLinks.indexOf(aLink) >= 0) {
+								i++;
+								continue;
+							}
+							processedLinks.push(aLink);
+							
+							var aFavorite:FavoriteLink = new FavoriteLink(
+								val['favorite'+i+'[link]'],
+								val['favorite'+i+'[time_register]']
+							);
+							
+							var cur:Number = favoriteLinkList.length;
+							favoriteLinkList.addItem(aFavorite);
+							favoriteLinkListHash[val['favorite'+i+'[link]']] = true;
+							
+							if (isUpdate && favoriteLinkList.length > cur) {
+								sidebar.alertFavorite();
+							}
+							
+							i++;
+						}
+						addFavoriteLink(isUpdate?aFavorite:null);
+					}else{
+						if (minTime <= 0) opt.EOL2 = true;
+						dispatchEvent(new StreamEvent(Event.COMPLETE, false, false, StreamEvent.LINK_FAVORITE_COMPLETE));
+					}
+				});
+				*/
+			}
+			
+			public function initialImportTwitter(type:String):void
+			{
+				var arr:StreamCollection = twitterUpdater.getCollection(type);
+				if (!arr) return;
+				
+				var i:Number;
+				if (type == 'dm') {
+					for (i=0; i < arr.length; i++)
+						stream.addItem(StreamEntry.twitterMsg(arr[i]), 1);
+				}else{
+					for (i=0; i < arr.length; i++)
+						stream.addItem(StreamEntry.twitter(arr[i]), 1);
+				}
+				
+				if (arr.length > 0) {
+					callLater(function():void {
+						dispatchEvent(new StreamEvent(Event.COMPLETE, false, false, StreamEvent.TWITTER_COMPLETE));
+					});
+				}
+
+				if (arr.length <= 20) {
+					fetchTwitter();
+				}
+			}
+			
+			public function twitterRepair():void
+			{
+				var funcMsg:Function = function(arr:Array, option:TwitterStreamOption, req:Object):void {
+					//trace(arr, option, req, req.type);
+					if (req.type == 'recv') {
+						callLater(function():void {
+							option.EOL = false;
+							option.fetching = false;
+							twitterUpdater.fetch('dm', funcMsg, {repair:true, type:'sent', limit:100});
+						});
+					}
+					if (filterType != 9) return;
+					
+					if (arr && arr.length > 0) {
+						for (var i:Number=0; i < arr.length; i++)
+							stream.addItem(StreamEntry.twitterMsg(arr[i]));
+					}
+				}
+
+				var func:Function = function(arr:Array, option:TwitterStreamOption, req:Object):void {
+					//trace(arr, option, req, req.type);
+					if (req.type == 'tweet') {
+						callLater(function():void {
+							twitterUpdater.fetch('mention', func, {repair:true, type:'mention', limit:100});
+						});
+						if (filterType != 1 && filterType != 2)
+							return;
+					}else if (req.type == 'mention') {
+						callLater(function():void {
+							twitterUpdater.fetch('dm', funcMsg, {repair:true, type:'recv', limit:100});
+						});
+						if (filterType != 8)
+							return;
+					}
+					
+					////// TODO: for favorite
+
+					if (arr && arr.length > 0) {
+						for (var i:Number=0; i < arr.length; i++)
+							stream.addItem(StreamEntry.twitter(arr[i]));
+					}
+				};
+				
+				twitterUpdater.fetch('tweet', func, {repair:true, type:'tweet', limit:100});
+			}
+			
+			public function fetchTwitter(forceType:Number=NaN):void
+			{
+				if (isNaN(forceType) && !filterIsTwitter) return;
+				
+				var func:Function = function(arr:Array, option:TwitterStreamOption, req:Object):void {
+					//trace('filterType', filterType, arr);
+					if (ftype != filterType) return;
+					
+					if (arr == null && !option.EOL) {
+						errorMsg.showMsg();
+						return;
+					}else if (!arr || arr.length <= 0) {
+						errorMsg.hideMsg();
+						dispatchEvent(new StreamEvent(Event.COMPLETE, false, false, StreamEvent.TWITTER_COMPLETE));
+						return;
+					}
+					errorMsg.hideMsg();
+					
+					for (var i:Number=0; i < arr.length; i++) {
+						stream.addItem(StreamEntry.twitter(arr[i]), 1);
+						
+//						if (ftype == 10) {
+//							var _ST:StatusData = StatusData(arr[i]);
+//							trace('============ _ST:StatusData ===========', i);
+//							trace(_ST);
+//							trace(_ST.id);
+//							trace(_ST.createdAt);
+//						}
+					}
+					dispatchEvent(new StreamEvent(Event.COMPLETE, false, false, StreamEvent.TWITTER_COMPLETE));
+					
+					stream.validate();
+				};
+				
+				var ftype:Number = !isNaN(forceType)?forceType:filterType;
+				switch (ftype) {
+					case 1:
+					case 2:
+						twitterUpdater.fetch('tweet', func);
+						break;
+					case 4:
+					case 5:
+						var li:ListData = filterListData;
+						twitterUpdater.fetch('list', func, {list:li});
+						break;
+					case 8:
+						sidebar.alertNotificationClear();
+						twitterUpdater.fetch('mention', func);
+						break;
+					case 9:
+						sidebar.alertMessageClear();
+						
+						var a:StreamCollection = twitterUpdater.getCollection('dm');
+						if (TwitterStreamOption(a.userData).requested) {
+							dispatchEvent(new StreamEvent(Event.COMPLETE, false, false, StreamEvent.TWITTER_COMPLETE));
+							return;
+						}
+						
+						var funcMsg:Function = function(arr:Array, option:TwitterStreamOption, req:Object):void {
+							if (ftype != filterType) {
+								if (req.type == 'recv') {
+									option.EOL = false;
+									option.fetching = false;
+									twitterUpdater.fetch('dm', funcMsg, {type:'sent'});
+								}
+								option.requested = true;
+								return;
+							}
+							
+							if (arr == null) {
+								errorMsg.showMsg();
+							}else if (arr) {
+								var lastCheckId:Number = getLastCheckTwitterMessage(req.type, userid);
+								for (var i:Number=0; i < arr.length; i++) {
+									lastCheckId = lastCheckId < 0?arr[i].id:Math.max(lastCheckId, arr[i].id);
+									stream.addItem(StreamEntry.twitterMsg(arr[i]), 1);
+								}
+								setLastCheckTwitterMessage(req.type, userid, lastCheckId);
+							}
+							dispatchEvent(new StreamEvent(Event.COMPLETE, false, false, StreamEvent.TWITTER_COMPLETE));
+							
+							if (req.type == 'recv') {
+								option.EOL = false;
+								option.fetching = false;
+								twitterUpdater.fetch('dm', funcMsg, {type:'sent'});
+							}else{
+								option.EOL = true;
+								option.requested = true;
+							}
+						}
+						twitterUpdater.fetch('dm', funcMsg, {type:'recv'});
+						break;
+					case 10:
+						sidebar.alertFavoriteClear();
+						twitterUpdater.fetch('favorite', func);
+						break;
+				}
+			}
+			
+			public function _updateTwitter(isImmediateTweet:Boolean=false):void
+			{
+				if (filterType != 4 && filterType != 5) return;
+				var li:ListData = filterListData;
+				var ftype:Number = filterType;
+				
+				var func:Function = function(arr:Array, option:TwitterStreamOption, listData:ListData):void {
+					option.EOL = false;
+					if (ftype != filterType || li.id != listData.id) return;
+					
+					if (arr != null && arr.length > 0) {
+						for (var i:Number=0; i < arr.length; i++) {
+							if (!arr[i].id || arr[i].id == undefined) continue;
+							stream.addItem(StreamEntry.twitter(arr[i]));
+						}
+					}
+				};
+				
+				twitterUpdater.listUpdate(func, li);
+			}
+			
+			public function twitterStatusUpdated(status:StatusData):void
+			{
+				if (filterType != 1 && filterType != 2) return;
+				var se:StreamEntry = StreamEntry.twitter(status);
+				if (se) {
+					StreamItemRendererTwitter.getContent(se, true);
+					stream.addItem(se);
+				}
+			}
+			
+			private function updatedTweetsClear():void
+			{
+				clearTimeout(updatedTweetsPopTimer);
+				updatedTweets.removeAll();
+			}
+			
+			private var updatedTweetsPopTimer:uint;
+			private function updatedTweetsChanged():void
+			{
+				clearTimeout(updatedTweetsPopTimer);
+				updatedTweetsPopTimer = setTimeout(updatedTweetsPop, 20);
+			}
+			
+			private function updatedTweetsPop():void
+			{
+				clearTimeout(updatedTweetsPopTimer);
+				
+				var time:Number = new Date().getTime();
+				while (updatedTweets.length > 0) {
+					var item:Object = updatedTweets.getItemAt(0);
+					if (!item) break;
+					if (item.pushTime < time) {
+						updatedTweets.removeItemAt(0);
+						_twitterUpdated(item.type, item.entry);
+					}else{
+						//trace('rerun', item.pushTime-time);
+						updatedTweetsPopTimer = setTimeout(updatedTweetsPop, item.pushTime-time);
+						break;
+					}
+				}
+			}
+			
+			public function twitterUpdated(event:TwitterStreamEvent):void
+			{
+				var se:StreamEntry;
+				var delay:Number = 1000;
+				switch (event.type) {
+					case TwitterStreamEvent.STATUS:
+						if (filterType != 1 && filterType != 2) return;
+						
+						var status:StatusData = event.statusData;
+						if (!status) return;
+						se = StreamEntry.twitter(status);
+						if (se) StreamItemRendererTwitter.getContent(se, true);
+						delay = 5000;
+						break;
+					case TwitterStreamEvent.MENTION:
+						if (filterType != 8) return;
+						
+						status = event.statusData;
+						if (!status) return;
+						se = StreamEntry.twitter(status);
+						if (se) StreamItemRendererTwitter.getContent(se, true);
+						delay = 10;
+						break;
+					case TwitterStreamEvent.DIRECT_MESSAGE:
+						if (filterType != 9) return;
+						
+						var msg:DirectMessageData = event.directMessageData;
+						if (!msg) return;
+						se = StreamEntry.twitterMsg(msg);
+						if (se) StreamItemRendererTwitterMessage.getContent(se, true);
+						delay = 10;
+						break;
+					case TwitterStreamEvent.FAVORITE:
+						if (filterType != 10) return;
+						
+						status = event.statusData;
+						if (!status) return;
+						se = StreamEntry.twitter(status);
+						if (se) StreamItemRendererTwitter.getContent(se, true);
+						delay = 10;
+						break;
+				}
+				
+				if (se) {
+					updatedTweets.addItem({'pushTime':(new Date().getTime()+delay), entry:se, type:event.type});
+					updatedTweetsChanged();
+					//setTimeout(_twitterUpdated, delay, event, se);
+				}
+			}
+			
+			public function _twitterUpdated(eventType:String, se:StreamEntry):void
+			{
+				if (!twitter.ready) return;
+				switch (eventType) {
+					case TwitterStreamEvent.STATUS:
+						if (filterType != 1 && filterType != 2) {
+							se.destroy();
+							return;
+						}
+						break;
+					case TwitterStreamEvent.MENTION:
+						if (filterType != 8) {
+							se.destroy();
+							return;
+						}
+						break;
+					case TwitterStreamEvent.DIRECT_MESSAGE:
+						if (filterType != 9) {
+							se.destroy();
+							return;
+						}
+						break;
+					case TwitterStreamEvent.FAVORITE:
+						if (filterType != 10) {
+							se.destroy();
+							return;
+						}
+						break;
+				}
+				stream.addItem(se);
+			}
+			
+			public function updateLinkFavorites():void
+			{
+				setTimeout(updateLinkFavorites, 10000);
+				if (!twitter.ready) return;
+				if (favoriteLinkList.length > 0) {
+					var fav:FavoriteLink = favoriteLinkList.getItemAt(0) as FavoriteLink;
+					fetchLinkFavorites(0, fav.registered, true);
+				}else
+					fetchLinkFavorites(0, Base.timeStart, true);
+			}
+			
+			public var updateBlogSeq:Number;
+			public function updateBlog():void
+			{
+				if (!twitter || !twitter.userid) {
+					setTimeout(updateBlog, 10000);
+					return;
+				}
+				
+				updateBlogSeq = Math.random();
+				
+				var ticket:Number = updateBlogSeq;
+				/*
+				DataServer.request('UP', 'time='+timeLastUpdate+'&user='+(twitter.userid)+'&v='+(Util.getVersion()), function(val:URLVariables):void {
+					setTimeout(updateBlog, 10000);
+					if (val == null || ticket != updateBlogSeq) {
+						return;
+					}
+					
+					timeLastUpdate = new Date().getTime();
+					
+					try{
+					var i:Number = 1;
+					while (val['entry'+i+'[link]']) {
+						var entry:BlogEntry = new BlogEntry;
+						if (val['entry'+i+'[blog_feedlink]']) {
+							entry.blog = feed.isSubscribed(val['entry'+i+'[blog_feedlink]']);
+							if (!entry.blog)
+								entry.blog = new Blog(val['entry'+i+'[blog_link]'], val['entry'+i+'[blog_feedlink]'], val['entry'+i+'[blog_title]'], val['entry'+i+'[blog_description]'], val['entry'+i+'[blog_profileimage]']);
+						}else{
+							entry.blog = new Blog;
+						}
+						
+						entry.id = -1;
+						entry.link = URL.normalize(val['entry'+i+'[link]']);
+						entry.title = val['entry'+i+'[title]'];
+						
+						entry.description = val['entry'+i+'[description]'];
+						entry.content = val['entry'+i+'[content]'];
+						entry.published = new Date();
+						entry.published.setTime(Number(val['entry'+i+'[published]']+'000'));
+						if (val['entry'+i+'[category]'] != null)
+							entry.category = val['entry'+i+'[category]'].toString().split('	');
+						entry.image = val['entry'+i+'[image]'];
+						entry.video = val['entry'+i+'[video]'];
+						entry.confirm = val['entry'+i+'[confirm]'] == 't'?true:false;
+						entry.source = (val['entry'+i+'[is_readability]'] && val['entry'+i+'[is_readability]'] == 't')?'readability':'lf';
+						entry.local = false;
+						entry.service = val['entry'+i+'[service]'];
+						
+						_addBlogEntry(entry, true);
+						
+						i++;
+					}
+					}catch(e:Error) {
+						trace('updateBlog', e);
+					}
+				});
+				*/
+			}
+			
+			private function _addBlogEntry(entry:BlogEntry, isUpdated:Boolean=false):void
+			{
+				feed.addBlogEntry(entry, isUpdated);
+				/*
+				BlogEntry.register(entry, function(id:Number):void {
+					if (id > 0) {
+						feed.addBlogEntry(entry, isUpdated);
+					}
+				});
+				*/
+			}
+			
+			public function addFavoriteLink(updatedLink:FavoriteLink=null):void
+			{
+				if (updatedLink == null || filterType != 10) {
+					if (filterType == 10) {
+						if (Base.favoriteLinkList && Base.favoriteLinkList.length > 0) {
+							for (var i:Number = 0; i < Base.favoriteLinkList.length; i++) {
+								stream.addItem(StreamEntry.favoriteLink(FavoriteLink(Base.favoriteLinkList[i])), 1);
+							}
+						}
+					}
+					dispatchEvent(new StreamEvent(Event.COMPLETE, false, false, StreamEvent.LINK_FAVORITE_COMPLETE));
+				}else{
+					var se:StreamEntry = StreamEntry.favoriteLink(updatedLink);
+					StreamItemRendererFavoriteLink.getContent(se, true);
+					setTimeout(function():void {
+						if (filterType == 10)
+							stream.addItem(se);
+						else
+							se.destroy();
+					}, 5000);
+				}
+			}
+			
+			public function addBlog(b:Blog, noRequest:Boolean = false):void
+			{
+				if (b.requested || noRequest) {
+					if (b.entries && b.entries.length > 0) {
+						for (var i:Number=0; i < b.entries.length; i++)
+							stream.addItem(StreamEntry.blog(BlogEntry(b.entries.getItemAt(i))), 1);
+					}
+					dispatchEvent(new StreamEvent(Event.COMPLETE, false, false, StreamEvent.BLOG_COMPLETE));
+				}else{
+					var func:Function = function(res:Object, blog:Object):void {
+						if (res) {
+							var data:Array = res.data;
+							if (data && data.length > 0) {
+								if (!b.entries) {
+									b.entries = new StreamCollection;
+									b.entries.uniqKey = 'link';
+									b.entries.setSort([['published', true, false]]);
+									b.entries.maxCount = 30;
+								}else
+									b.entries.removeAll();
+								for (var i:Number=0; i < data.length; i++) {
+									var e:BlogEntry = BlogEntry(data[i]);
+									e.blog = b;
+									
+									feed.addBlogEntry(e, false, b);
+									
+									//b.entries.addItem(e);
+									//stream.addItem(StreamEntry.blog(e), 1);
+								}
+							}
+						}
+						b.requested = true;
+						dispatchEvent(new StreamEvent(Event.COMPLETE, false, false, StreamEvent.BLOG_COMPLETE));
+					};
+					feed.getHostContentFromServer(b.link, func, function():void {
+						b.requested = true;
+						dispatchEvent(new StreamEvent(Event.COMPLETE, false, false, StreamEvent.BLOG_COMPLETE));
+					}, b);
+				}
+			}
+			
+			public function getMoreTwitter():void
+			{
+				//trace('tweetsEOL, tweetsFetching, tweets.length, filterIsTwitter', tweetsEOL, tweetsFetching, tweets.length, filterIsTwitter);
+				if (!filterIsTwitter) return;
+
+				var type:String = '';
+				switch (filterType) {
+					case 1:
+					case 2:
+						type = 'tweet';
+						break;
+					case 4:
+					case 5:
+						type = 'list';
+						break;
+					case 8:
+						type = 'mention';
+						break;
+					case 10:
+						type = 'favorite';
+						break;
+					default:
+						return;
+						break;
+				}
+				
+				if (stream.dataGroup.numChildren > 0) {
+					var item:StreamItemRenderer = StreamItemRenderer(stream.dataGroup.getChildAt(stream.dataGroup.numChildren-1));
+					if (item != null) {
+						var e:StreamEntry = StreamEntry(item.data);
+						if (e != null) {
+							var idx:Number = stream.data.getItemIndex(e);
+							var date:Number;
+							if (type == 'favorite') {
+								//TODO: time check
+								if (idx > stream.data.length-20) {
+									var opt:TwitterStreamOption = twitterUpdater.getStreamOption(type);
+									if (opt) {
+										if (!opt.EOL2 && !opt.fetching2) {
+											var link:FavoriteLink = Base.favoriteLinkList.getItemAt(Base.favoriteLinkList.length-1) as FavoriteLink;
+											if (link)
+												fetchLinkFavorites(link.published.getTime());
+										}
+									}
+								}
+							}
+
+							date = twitterUpdater.getLastItemTime(type);
+							//trace('twitterUpdater.getLastItemTime', date);
+							if ((date > 0 && e.published.getTime() < date) || idx > stream.data.length-20) {
+								for (var i:Number=stream.data.length; i--;) {
+									var d:StreamEntry = stream.data.getItemAt(i) as StreamEntry;
+									if (d && (d.type == 'T' || d.type == 'M')) {
+										var arr:ArrayList = twitterUpdater.getRecentItems(type, d.published.getTime());
+										if (arr && arr.length > 0) {
+											for (i=0; i < arr.length; i++) {
+												//trace(type, 'stream.addItem(StreamEntry.twitter(arr.getItemAt(i) as StatusData), 1);');
+												stream.addItem(StreamEntry.twitter(arr.getItemAt(i) as StatusData), 1);
+											}
+											if (arr.length > 20)
+												return;
+										}
+										break;
+									} 
+								}
+								
+								if (!twitterUpdater.isFetchEnabled(type)) return;
+								if (e.sortk1 <= 1) {
+									//trace(type, 'fetchTwitter();');
+									fetchTwitter();
+								}
+							}
+						}
+					}
+				}
+			}
+			
+			public function deleteTwitter(tw:StreamItemRenderer, e:StreamEntry):void
+			{
+				Util.isShowingAlert = true;
+				Alert.show(null, 'Are you sure you want to delete this '+(e.type == 'M'?'message':'tweet')+'?', Alert.YES|Alert.NO, Base.app, function(event:CloseEvent):void {
+					if (event.detail == Alert.YES) {
+						var funcDestroy:Function = function(responseArray:Array):void {
+							if (responseArray != null) {
+								if (tw) {
+									tw.minHeight = NaN;
+									tw.mouseEnabled = false;
+									tw.clipAndEnableScrolling = true;
+									var effect:Resize = new Resize(tw);
+									effect.duration = 1000;
+									effect.easer = new Power(0.5, 4);
+									effect.heightTo = 0;
+									effect.heightFrom = tw.height;
+									
+									var ff:Function = function(event:EffectEvent):void {
+										effect.removeEventListener(EffectEvent.EFFECT_END, ff);
+										
+										var idx:Number = stream.data.getItemIndex(e);
+										if (idx > -1)
+											stream.data.removeItemAt(idx);
+									};
+									
+									if (effect.isPlaying)
+										effect.stop();
+									effect.addEventListener(EffectEvent.EFFECT_END, ff);
+									effect.play();
+									
+									// remove entry from streamCollection
+									if (e.type == 'M') {
+										twitterUpdater.dm.removeSearchedItems('id', e.twitMsg.id);
+									}else{
+										twitterUpdater.tweet.removeSearchedItems('id', e.twitStatus.id);
+										twitterUpdater.mention.removeSearchedItems('id', e.twitStatus.id);
+										twitterUpdater.favorite.removeSearchedItems('id', e.twitStatus.id);
+									}
+								}
+							}else{
+								Util.showWarning();
+							}
+						};
+
+						if (e.type == 'M')
+							twitter.destroyDirectMessage(e.twitMsg.id, funcDestroy);
+						else
+							twitter.destroyStatus(e.twitStatus.id, funcDestroy);
+					}
+					Util.isShowingAlert = false;
+				}, null, Alert.YES);
+			}
+
+			public function favoriteLink(tw:StreamItemRenderer, e:StreamEntry, isCreate:Boolean):void
+			{
+				favoriteLinkList.removeSearchedItems('link', e.link);
+				delete favoriteLinkListHash[e.link];
+				
+				if (isCreate) {
+					//DataServer.request('FA', 'u='+encodeURIComponent(e.link)+'&id='+Base.twitter.userid);
+					
+					var aFavorite:FavoriteLink = new FavoriteLink(
+						e.link,
+						(new Date).getTime()
+					);
+					favoriteLinkList.addItem(aFavorite);
+					favoriteLinkListHash[e.link] = true;
+					
+					if (filterType == 10) {
+						stream.addItem(StreamEntry.favoriteLink(aFavorite), NaN);
+					}else{
+						Base.sidebar.alertFavorite();
+					}
+				}else{
+					//DataServer.request('FD', 'u='+encodeURIComponent(e.link)+'&id='+Base.twitter.userid);
+					
+					if (tw && filterType == 10) {
+						tw.minHeight = NaN;
+						tw.mouseEnabled = false;
+						tw.clipAndEnableScrolling = true;
+						var effect:Resize = new Resize(tw);
+						effect.duration = 1000;
+						effect.easer = new Power(0.5, 4);
+						effect.heightTo = 0;
+						effect.heightFrom = tw.height;
+						
+						var ff:Function = function(event:EffectEvent):void {
+							effect.removeEventListener(EffectEvent.EFFECT_END, ff);
+							
+							var idx:Number = stream.data.getItemIndex(e);
+							if (idx > -1)
+								stream.data.removeItemAt(idx);
+						};
+						
+						if (effect.isPlaying)
+							effect.stop();
+						effect.addEventListener(EffectEvent.EFFECT_END, ff);
+						effect.play();
+					}
+				}
+			}
+
+			public function favoriteTwitter(tw:StreamItemRenderer, e:StreamEntry, isCreate:Boolean):void
+			{
+				var funcFavorite:Function = function(responseArray:Array):void {
+					if (responseArray != null) {
+						e.twitStatus.favorited = isCreate;
+						
+						if (!isCreate) {
+							if (tw && filterType == 10) {
+								tw.minHeight = NaN;
+								tw.mouseEnabled = false;
+								tw.clipAndEnableScrolling = true;
+								var effect:Resize = new Resize(tw);
+								effect.duration = 1000;
+								effect.easer = new Power(0.5, 4);
+								effect.heightTo = 0;
+								effect.heightFrom = tw.height;
+								
+								var ff:Function = function(event:EffectEvent):void {
+									effect.removeEventListener(EffectEvent.EFFECT_END, ff);
+									
+									var idx:Number = stream.data.getItemIndex(e);
+									if (idx > -1)
+										stream.data.removeItemAt(idx);
+								};
+								
+								if (effect.isPlaying)
+									effect.stop();
+								effect.addEventListener(EffectEvent.EFFECT_END, ff);
+								effect.play();
+							}
+							twitterUpdater.favorite.removeSearchedItems('id', e.twitStatus.id);
+						}
+
+						twitterUpdater.tweet.updateSearchedItems('id', e.twitStatus.id, {'favorited':isCreate});
+						twitterUpdater.mention.updateSearchedItems('id', e.twitStatus.id, {'favorited':isCreate});
+							
+					}else{
+						Util.showWarning();
+					}
+				};
+
+				if (isCreate)
+					twitter.createFavorite(e.twitStatus.id, funcFavorite);
+				else
+					twitter.destroyFavorite(e.twitStatus.id, funcFavorite);
+			}
+
+			public function retweetTwitter(tw:StreamItemRenderer, e:StreamEntry):void
+			{
+				Util.isShowingAlert = true;
+				Alert.show('Retweet this to your followers?', '', Alert.OK|Alert.CANCEL, Base.app, function(event:CloseEvent):void {
+					if (event.detail == Alert.OK) {
+						
+						var func:Function = function(responseArray:Array):void {
+							if (responseArray != null) {
+								if (tw) {
+									//TODO: reaction!!!
+									e.twitStatus.retweetedByMe = true;
+									if (!Base.contentViewer.focused) {
+										StreamItemRendererTwitterButtons.show();
+									}
+									Base.stream.twitterStatusUpdated(responseArray[0]);
+//									trace('*** retweet is successful!');
+								}
+							}else{
+								Util.showWarning();
+							}
+						};
+						
+						twitter.retweet(e.twitStatus.id, func);
+						
+					}
+					Util.isShowingAlert = false;
+				}, null, Alert.OK);
+			}
+
+			protected var _mouseMoveTimer:uint;
+			protected function base1_mouseMoveHandler(event:MouseEvent):void
+			{
+				Base.mouseMoving = true;
+				if (_mouseMoveTimer)
+					clearTimeout(_mouseMoveTimer);
+				_mouseMoveTimer = setTimeout(function():void {
+					Base.mouseMoving = false;
+				}, 100);
+			}
+
+		]]>
+	</fx:Script>
+	
+</lazyscope:Base>

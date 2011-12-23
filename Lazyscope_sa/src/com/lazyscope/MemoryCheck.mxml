@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx" creationComplete="hgroup1_creationCompleteHandler(event)" fontSize="10">
+	
+	<fx:Declarations>
+		<mx:NumberFormatter id="format" useThousandsSeparator="true" />
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import flash.utils.setInterval;
+			
+			import mx.events.FlexEvent;
+
+			private var maxmem:Number = 0;
+			private var lasttotal:Number = 0;
+			private var startTime:Number = new Date().getTime();
+			
+			protected function hgroup1_creationCompleteHandler(event:FlexEvent):void
+			{
+				setInterval(printMem, 1000);
+				
+				setInterval(timerFunc, 200);
+			}
+			
+			public var prevPMem:Number;
+			public var prevTMem:Number;
+			public function printMem():void
+			{
+				//trace('Memory,'+(System.privateMemory)+','+(System.privateMemory-prevPMem)+','+(System.totalMemory)+','+(System.totalMemory-prevTMem));
+				trace('Memory	'+(System.privateMemory)+'	'+(System.totalMemory));
+				prevPMem = System.privateMemory;
+				prevTMem = System.totalMemory;
+			}
+			
+			private function timerFunc():void
+			{
+				var totalmem:Number = System.totalMemory;
+				if (totalmem < lasttotal)
+					collected.text = format.format(Math.round(maxmem/1024)).toString()+'K';
+				lasttotal = totalmem;
+				total.text = format.format(Math.round(totalmem/1024)).toString()+'K';
+				maxmem = Math.max(maxmem, System.totalMemory);
+				max.text = format.format(Math.round(maxmem/1024)).toString()+'K';
+				
+				cntTweet.text = format.format(Base.twitterUpdater.tweet.length).toString();
+				cntStream.text = format.format(Base.stream.stream.data.length).toString();
+				
+				uptime.text = (Math.round(((new Date().getTime())-startTime)/100/60)/10) + ' min';
+				
+				if (CachedImage.cacheLoader)
+					cntQueue.text = format.format(CachedImage.cacheLoader.numPendingQueue).toString();
+			}
+		]]>
+	</fx:Script>
+	
+	<s:HGroup>
+		<s:Label text="Current:" />
+		<s:Label id="total" text="0" />
+	</s:HGroup>
+	<s:HGroup>
+		<s:Label text="Max:"/>
+		<s:Label id="max" text="0" />
+	</s:HGroup>
+	<s:HGroup>
+		<s:Label text="Collected at:"/>
+		<s:Label id="collected" text="0" />
+	</s:HGroup>
+	<s:HGroup>
+		<s:Label text="Uptime:"/>
+		<s:Label id="uptime" text="0" />
+	</s:HGroup>
+	
+	<s:HGroup>
+		<s:Label text="Tweet" />
+		<s:Label id="cntTweet" text="0" />
+		<mx:Spacer width="5" />
+		<s:Label text="Stream" />
+		<s:Label id="cntStream" text="0" />
+		<mx:Spacer width="5" />
+	</s:HGroup>
+	
+	<s:HGroup>
+		<s:Label text="Image" />
+		<s:Label id="cntQueue" text="0" />
+		<mx:Spacer width="5" />
+	</s:HGroup>
+	
+	<s:Button label="gc" click="System.gc();" />
+	<s:Button label="refresh" click="Base.stream.stream.refresh(true);System.gc();" />
+	<s:Button label="refresh all" click="Base.stream.wakeupLast = 1;Base.stream.wakeupCheck();System.gc();" />
+	<s:Button label="cache image" click="CachedImage.cacheLoader.removeAllQueueEntries();" />
+	
+</s:VGroup>

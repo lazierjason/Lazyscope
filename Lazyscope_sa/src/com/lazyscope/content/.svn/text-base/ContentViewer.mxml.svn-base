@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx"
+		 xmlns:content="com.lazyfeed.content.*"
+		 borderVisible="false" backgroundColor="0xE4E4DA">
+	
+	<fx:Declarations>
+		<s:Animate duration="150" id="scrollAnimate">
+			<s:SimpleMotionPath property="scrollTop" id="scrollTop" />
+		</s:Animate>
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyfeed.Base;
+			import com.lazyfeed.DB;
+			import com.lazyfeed.DataServer;
+			import com.lazyfeed.UIFrame;
+			import com.lazyfeed.Util;
+			import com.lazyfeed.control.FocusMarker;
+			import com.lazyfeed.control.PreviewBtn;
+			import com.lazyfeed.entry.BlogEntry;
+			import com.lazyfeed.entry.FavoriteLink;
+			import com.lazyfeed.entry.StreamEntry;
+			import com.lazyfeed.stream.StreamItemRenderer;
+			import com.lazyfeed.stream.StreamItemRendererTwitterButtons;
+			import com.lazyfeed.twitter.TweetWindow;
+			
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			
+			public function linkClicked(href:String):void
+			{
+				Base.navigateInBrowser(href);
+			}
+
+			public var data:BlogEntry;
+			public var lastDisplayNode:StreamItemRenderer;
+			
+			private var _focused:Boolean = false;
+			public function get focused():Boolean
+			{
+				return _focused ? true : false;
+			}
+			public function set focused(value:Boolean):void
+			{
+				_focused = value;
+				if (_focused) {
+					FocusMarker.focusMarker.visible = false;
+					StreamItemRendererTwitterButtons.hide();
+					htmlContainer.setStyle('borderColor', 0x44BA00);
+					htmlContainer.setStyle('borderWeight', 4);
+					htmlContainer.top = 57;
+					htmlContainer.bottom = 6;
+					htmlContainer.left = 8;
+					htmlContainer.right = 0;
+				}else{
+					FocusMarker.focusMarker.visible = true;
+					StreamItemRendererTwitterButtons.show();
+					htmlContainer.setStyle('borderColor', 0xCBC9B4);
+					htmlContainer.setStyle('borderWeight', 1);
+					htmlContainer.top = 60;
+					htmlContainer.bottom = 9;
+					htmlContainer.left = 11;
+					htmlContainer.right = 3;
+					
+					if (StreamItemRenderer.focusedData) {
+						var idx:int = Base.stream.stream.data.getItemIndex(StreamItemRenderer.focusedData);
+						if (idx >= 0) {
+							var e:StreamEntry = StreamEntry(Base.stream.stream.data.getItemAt(idx));
+							Base.stream.stream.ensureIndexIsVisible(idx);
+							Base.stream.stream.validate();
+							if (e.renderer) {
+								Base.stream.stream.scroller.viewport.verticalScrollPosition = Math.max(Base.stream.stream.scroller.viewport.verticalScrollPosition, e.renderer.y - Base.stream.stream.height + e.renderer.height + 50);
+								StreamItemRenderer.onFocusIn(e.renderer);
+							}
+							Base.stream.onScroll(null);
+						}
+					}
+				}
+			}
+			
+			public function showLink(url:String, title:String, displayNode:StreamItemRenderer=null, err:String=null, readabilityFail:Boolean=false, forceOpen:Boolean=false):void
+			{
+				if (lastDisplayNode && lastDisplayNode.selected) {
+					lastDisplayNode.selected = false;
+					if (!forceOpen && lastDisplayNode == displayNode) {
+						UIFrame.hideContentFrame();
+						lastDisplayNode = null;
+						data = null;
+						PreviewBtn.BTN.toOpen = true;
+						return;
+					}
+				}
+				if (displayNode) displayNode.selected = true;
+				lastDisplayNode = displayNode;
+				PreviewBtn.BTN.toOpen = false;
+				
+				header.blog.text = Util.htmlEntitiesDecode(title);
+				header.link = url;
+				
+				html.domWindow.ContentViewer.clear();
+				UIFrame.showContentFrame();
+				html.domWindow.ContentViewer.showLink(url, title, err, readabilityFail);
+				html.domWindow.linkClicked = linkClicked;
+				
+				header.blogLink.text = '';
+				header.btnSubscribe.enabled = header.btnSubscribe.visible = header.blogLink.visible = false;
+				header.requestFeed.visible = true;
+			
+				//header.btnReadability.visible = false;
+				
+				visible = true;
+				
+				data = null;
+			}
+			
+			private function responder(res:Boolean, arg:Array):void
+			{
+				if (res)
+					success(arg[0], arg[1], arg[2], arg[3]);
+				else
+					fail(arg[0], arg[1], arg[2], arg[3], arg[4], arg[5]);
+				arg = null;
+			}
+			
+			private function success(url:String, urlEndpoint:String, entry:BlogEntry, userData:Object):void
+			{
+				if (url == html.domWindow.ContentViewer.link || urlEndpoint == html.domWindow.ContentViewer.link) {
+					show(entry);
+				}
+			}
+			
+			private function fail(url:String, urlEndpoint:String, err:String, userData:Object, title:String, readabilityFail:Boolean):void
+			{
+				if (url == html.domWindow.ContentViewer.link || urlEndpoint == html.domWindow.ContentViewer.link) {
+					showLink(url ? url.replace(/^\s+/, '').replace(/\s+$/, '').replace(/\s+/, ' ') : '', (title ? title : url).replace(/^\s+/, '').replace(/\s+$/, '').replace(/\s+/, ' '), lastDisplayNode ? lastDisplayNode : null, err, readabilityFail, true);
+				}
+			}
+			
+			private function retry(url:String):void
+			{
+				var sql:String = 'delete from p4_fail_link where url=:url or url2=:url';
+				DB.session().execute(sql, {':url':url});
+				Base.feed.getContent(url, responder);
+			}
+			
+			public function show(e:BlogEntry, displayNode:StreamItemRenderer=null, forceOpen:Boolean=false):void
+			{
+				if (lastDisplayNode && lastDisplayNode.selected) {
+					lastDisplayNode.selected = false;
+					if (!forceOpen && lastDisplayNode == displayNode) {
+						UIFrame.hideContentFrame();
+						lastDisplayNode = null;
+						data = null;
+						PreviewBtn.BTN.toOpen = true;
+						return;
+					}
+				}
+				if (displayNode) displayNode.selected = true;
+				lastDisplayNode = displayNode;
+				PreviewBtn.BTN.toOpen = false;
+
+				if (!e) return;
+				if (data && data.link == e.link) {
+					UIFrame.showContentFrame();
+					return;
+				}
+				data = e;
+
+				var title:String;
+				if (e.blog && e.blog.title)
+					title = e.blog.title.replace(/\s+/, ' ');
+				else if (e.blog && e.blog.link)
+					title = e.blog.link;
+				else if (e.title)
+					title = e.title.replace(/\s+/, ' ');
+				else
+					title = e.link;
+				header.blog.text = Util.htmlEntitiesDecode(title).replace(/<[^>]+>/g, '');
+				
+				html.domWindow.ContentViewer.clear();
+				UIFrame.showContentFrame();
+				html.domWindow.ContentViewer.show(e);
+				html.domWindow.linkClicked = linkClicked;
+
+				header.link = e.link;
+				if (e.blog && e.blog.link) {
+					header.blogLink.text = e.blog.link;
+					header.btnSubscribe.blog = e.blog;
+					header.btnSubscribe.enabled = header.btnSubscribe.visible = header.blogLink.visible = true;
+					Base.feed.getHostContentFromServer(e.blog.link, getHostContentResponse, null, e.blog);
+					header.requestFeed.visible = false;
+				}else{
+					header.blogLink.text = '';
+					header.btnSubscribe.enabled = header.btnSubscribe.visible = header.blogLink.visible = false;
+					header.requestFeed.visible = true;
+				}
+				//header.btnReadability.visible = e.source != 'readability';
+				
+				parent.stage.focus = html.htmlLoader;
+				
+				visible = true;
+			}
+			
+			private function getHostContentResponse(res:Object, blog:Object):void
+			{
+				if (!blog || !data || !data.blog || blog.link != data.blog.link) return;
+				if (res && res.data) {
+					var data:Array = res.data;
+					for (var i:Number=0; i < data.length; i++) {
+						var imageCandidates:Array = Util.extractImageURL(data[i].displayContent?data[i].displayContent:data[i].content);
+						if (imageCandidates && imageCandidates.length > 0) {
+							if (data[i].image) {
+								var p:int = imageCandidates.indexOf(data[i].image);
+								if (p >= 0)
+									imageCandidates.splice(p, 1);
+							}else{
+								data[i].image = imageCandidates.shift();
+							}
+						}
+						
+						html.domWindow.ContentViewer.addFeedEntry(data[i], imageCandidates);
+					}
+				}
+			}
+			
+			public function toPost(link:String, title:String, e:BlogEntry=null):void
+			{
+				var text:String = (title ? (title.replace(/\s+/g, ' ').substr(0, 300)+' ') : '') + (link ? (link+' ') : '');
+//				Base.toolbar.formSubscribe.hideForm();
+//				callLater(function():void {
+//					Base.toolbar.formTweet.post(text);
+//				});
+				
+//				TweetWindow.post(text);
+				TweetWindow.post(text, null, null, false, e);
+//				win.addSnapshot(text, e ? e : null);
+			}
+			
+			public function toFavorite(link:String, isCreate:Boolean = true):void
+			{
+				Base.favoriteLinkList.removeSearchedItems('link', link);
+				delete Base.favoriteLinkListHash[link];
+				
+				if (isCreate) {
+					DataServer.request('FA', 'u='+encodeURIComponent(link)+'&id='+Base.twitter.userid);
+					
+					var aFavorite:FavoriteLink = new FavoriteLink(
+						link,
+						(new Date).getTime()
+					);
+					Base.favoriteLinkList.addItem(aFavorite);
+					Base.favoriteLinkListHash[link] = true;
+					
+					if (Base.filterType == 10) {
+						Base.stream.stream.addItem(StreamEntry.favoriteLink(aFavorite), NaN);
+					}else{
+						Base.sidebar.alertFavorite();
+					}
+				}else{
+					DataServer.request('FD', 'u='+encodeURIComponent(link)+'&id='+Base.twitter.userid);
+				}
+			}
+			
+			private function htmlComplete(event:Event):void
+			{
+				html.htmlLoader.navigateInSystemBrowser = true;
+				
+				scrollAnimate.target = html.domWindow.document.body;
+				html.domWindow.scrollEffect = {animate:scrollAnimate, scrollTop:scrollTop};
+				html.domWindow.Util = Util;
+				html.domWindow.retry = retry;
+				html.domWindow.trace = trace;
+				html.domWindow.toPost = toPost;
+				html.domWindow.report = report;
+				html.domWindow.toFavorite = toFavorite;
+				html.domWindow.getFavoriteHash = function():Object {return Base.favoriteLinkListHash;};
+			}
+			
+			public function report(link:String):void
+			{
+				if (!link) return;
+				
+				var val:URLVariables = new URLVariables;
+				val.url = link;
+				
+				DB.session().execute('DELETE FROM p4_redirect WHERE to_url=:url', {':url':link});
+				DB.session().execute('DELETE FROM p4_readability WHERE link=:url', {':url':link});
+				
+				DataServer.request('RR', val.toString());
+				
+				Util.isShowingAlert = true;
+				Alert.show('Thank you!', '', Alert.OK, Base.app, function(event:CloseEvent):void{
+					Util.isShowingAlert = false;
+				});
+			}
+		]]>
+	</fx:Script>
+	<s:Group left="0" right="0" top="0" bottom="0">
+		<content:ContentViewerHeader id="header" height="49" left="10" right="0" top="0" />
+		<!-- <s:Button label="refresh" top="5" right="5" color="0xFFFFFF" click="html.htmlLoader.reload()" visible="false" /> -->
+		<s:BorderContainer id="htmlContainer" top="60" bottom="9" left="11" right="3" borderColor="0xCBC9B4" click="focused=true">
+			<mx:HTML id="html" top="0" bottom="0" left="0" right="0" complete="htmlComplete(event)" location="app:///html/ContentViewer.html" />
+		</s:BorderContainer>
+	</s:Group>
+</s:BorderContainer>

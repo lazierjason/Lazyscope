@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Panel xmlns:fx="http://ns.adobe.com/mxml/2009"
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx" width="330"
+		 title="Twitter Sign In" cornerRadius="7" borderAlpha="0.2">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.swfjunkie.tweetr.oauth.OAuth;
+			import com.swfjunkie.tweetr.oauth.events.OAuthEvent;
+			
+			private var _oauth:OAuth;
+			
+			public function set oauth(value:OAuth):void
+			{
+				_oauth = value;
+				_oauth.removeEventListener(OAuthEvent.COMPLETE, success);
+				_oauth.removeEventListener(OAuthEvent.ERROR, fail);
+				_oauth.addEventListener(OAuthEvent.COMPLETE, success, false, 0, true);
+				_oauth.addEventListener(OAuthEvent.ERROR, fail, false, 0, true);
+			}
+			
+			public function success(event:OAuthEvent):void
+			{
+				form.enabled = true;
+			}
+			
+			public function fail(event:OAuthEvent):void
+			{
+				form.enabled = true;
+				password.setFocus();
+				password.selectRange(0, password.text.length);
+				
+				error.text = 'Wrong Username/Email and password combination.';
+			}
+			
+			public function get oauth():OAuth
+			{
+				return _oauth;
+			}
+			
+			public function onKeyDown(event:KeyboardEvent):void
+			{
+				if (event.keyCode != 13) return;
+				
+				event.stopPropagation();
+				event.preventDefault();
+				
+				submit();
+			}
+			
+			public function submit():void
+			{
+				if (username.text.replace(/\s+/g, '').length <= 0) {
+					username.setFocus();
+					username.selectRange(0, username.text.length);
+					return;
+				}
+				
+				if (password.text.length <= 0) {
+					password.setFocus();
+					password.selectRange(0, password.text.length);
+					return;
+				}
+				oauth.requestAccessToken2(username.text.replace(/\s+/g, ''), password.text);
+				
+				form.enabled = false;
+			}
+		]]>
+	</fx:Script>
+	
+	<mx:Form id="form" width="100%" paddingLeft="10" paddingRight="10" paddingBottom="20" paddingTop="20" verticalGap="10" fontSize="13">
+		<mx:FormItem label="Username or email">
+			<s:TextInput id="username" keyDown="onKeyDown(event)" restrict="0-9 a-zA-Z_@." />
+		</mx:FormItem>
+		<mx:FormItem label="Password">
+			<s:TextInput id="password" displayAsPassword="true" keyDown="onKeyDown(event)" restrict="0-9 a-zA-Z`~!@#$%\\\^\&amp;*()_+\\\-=[]\\\\{}|;':\&quot;,./\&lt;\&gt;?" />
+		</mx:FormItem>
+		<s:Group width="100%">
+			<s:Button label="Sign In" horizontalCenter="0" left="50%" click="submit()" fontWeight="bold" fontSize="14" />
+		</s:Group>
+		
+		<s:Label id="error" width="100%" color="0xEF4021" textAlign="center" />
+	</mx:Form>
+	
+</s:Panel>

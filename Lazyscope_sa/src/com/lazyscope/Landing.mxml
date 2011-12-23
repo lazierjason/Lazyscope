@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx"
+		 clipAndEnableScrolling="true">
+	
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+
+			protected function group1_creationCompleteHandler():void
+			{
+				html.htmlLoader.navigateInSystemBrowser = true;
+				html.htmlLoader.window.moveURL = navigateInBrowser;
+				html.htmlLoader.window.getTwitterID = function():String {
+					return Base.twitter.userid;
+				};
+				
+				// stand-alone
+				html.location = 'http://www.lazyscope.com/';
+			}
+			
+			protected function navigateInBrowser(url:String):void
+			{
+				if (url) {
+					navigateToURL(new URLRequest(url));
+				}
+			}
+		]]>
+	</fx:Script>
+	
+	<mx:HTML id="html" width="100%" horizontalScrollPolicy="off" height="100%" addedToStage="group1_creationCompleteHandler()" />
+	
+	<!--
+	<s:Rect width="100%" height="100%">
+		<s:fill>
+			<s:LinearGradient rotation="90">
+				<s:GradientEntry color="0xFFFFFF" />
+				<s:GradientEntry color="0xF2F1E9" />
+			</s:LinearGradient>
+		</s:fill>
+	</s:Rect>
+	
+	<s:Image horizontalCenter="0" top="192" left="50%" source="img/logo.png" width="316" height="65" />
+	
+	<s:Group top="257" bottom="0" width="100%">
+		<s:Group left="0" bottom="0" width="100%" maxHeight="100" clipAndEnableScrolling="true">
+			<s:Rect width="100%" height="100%">
+				<s:fill>
+					<s:SolidColor color="0x2D2A20" />
+				</s:fill>
+			</s:Rect>
+			
+			<s:HGroup width="90%" maxWidth="530" verticalAlign="top" horizontalCenter="0" left="50%" paddingTop="5" paddingBottom="5">
+				<s:Image source="img/icon_twitter.gif" width="36" height="36" />
+				<s:RichEditableText editable="false" paddingTop="3" width="100%" color="0xFAFAF7" fontSize="13" fontFamily="Arial">Want to stay on top of announcements, updates and new features from Lazyscope?<s:br />Follow <s:span fontWeight="bold">@LazyS</s:span> on Twitter!  <s:a href="http://twitter.com/LazyS"><s:span fontWeight="bold" color="0xCEE533">Follow @LazyS</s:span></s:a></s:RichEditableText>
+			</s:HGroup>
+		</s:Group>
+	</s:Group>
+	-->
+	
+</s:Group>

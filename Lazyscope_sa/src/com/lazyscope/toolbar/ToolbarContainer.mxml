@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lazyscope:Base xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		   xmlns:s="library://ns.adobe.com/flex/spark" 
+		   xmlns:mx="library://ns.adobe.com/flex/mx"
+		   xmlns:twitter="com.lazyscope.twitter.*"
+		   xmlns:lazyscope="com.lazyscope.*" 
+		   xmlns:stream="com.lazyscope.stream.*"
+		   width="100%"
+		   creationComplete="onCreationComplete(event)" xmlns:toolbar="com.lazyscope.toolbar.*" xmlns:control="com.lazyscope.control.*" >
+	
+	<lazyscope:layout>
+		<s:BasicLayout clipAndEnableScrolling="true" />
+	</lazyscope:layout>
+	
+	<lazyscope:backgroundFill>
+		<s:LinearGradient rotation="90">
+			<s:GradientEntry color="0x555555" />
+			<s:GradientEntry color="0x343434" />
+		</s:LinearGradient>
+	</lazyscope:backgroundFill>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.UIFrame;
+			import com.lazyscope.control.ToggleBtnSkin;
+			import com.lazyscope.entry.StreamEntry;
+			import com.lazyscope.stream.StreamSelector;
+			import com.lazyscope.stream.StreamSelectorItem;
+			import com.lazyscope.twitter.TweetWindow;
+			import com.lazyscope.twitter.TwitterStreamEvent;
+			
+			import spark.events.IndexChangeEvent;
+			
+			public var selectionMenu:StreamSelection;
+			public var selector:StreamSelector;
+			
+			private function onCreationComplete(event:Event):void
+			{
+				registerHandler();
+				
+				selector.addEventListener(IndexChangeEvent.CHANGE, selectorChange, false, 0, true);
+				selector.addEventListener(MouseEvent.CLICK, onClick, false, 0, true);
+				
+				twitterUpdater.addEventListener(TwitterStreamEvent.DIRECT_MESSAGE, twitterDMUpdated, false, 0, true);
+				twitterUpdater.addEventListener(TwitterStreamEvent.MENTION, twitterMentionUpdated, false, 0, true);
+			}
+
+			override protected function twitterComplete(event:Event):void
+			{
+				twitterProfile.source = 'http://api.twitter.com/1/users/profile_image/'+userid+'.json?size=normal';
+				//btnPost.enabled = selectionMenu.btnSubscribe.enabled = btnMentions.enabled = btnMessages.enabled = true;
+				selector.truncate();
+				selector.data.addItem({type:2, name:screenName});
+
+				//fetchTwitterLists
+				if (timerTwitterListsMine)
+					clearTimeout(timerTwitterListsMine);
+				if (timerTwitterListsSubscribe)
+					clearTimeout(timerTwitterListsSubscribe);
+				fetchTwitterListsMine();
+				fetchTwitterListsSubscribe();
+				
+				UIFrame.hideContentFrame();
+				
+				updateTwitterMessageCount(0);
+				
+				////// TODO: actually not working!!!
+				callLater(function():void {
+					selector.selectedIndex = 0;
+				});
+			}
+			
+			override protected function twitterCancel(event:Event):void
+			{
+				twitterProfile.source = null;
+				//btnPost.enabled = selectionMenu.btnSubscribe.enabled = btnMentions.enabled = btnMessages.enabled = false;
+				btnMentions.selected = btnMessages.selected = false;
+				selector.truncate();
+				updateTwitterMessageCount(0);
+				
+				landing.visible = true;
+			}
+
+			protected function onClick(event:MouseEvent):void
+			{
+//				if (selector.alpha == 1) return;
+//				callLater(selectorChange);
+			}
+			
+			protected function selectorChange(event:IndexChangeEvent = null):void
+			{
+				var item:Object = selector.selectedItem;
+				if (!item) return;
+				filterType = item.type;
+				switch (filterType) {
+					case 4:
+					case 5:
+						filterListData = item.data;
+						break;
+					case 7:
+						filterLink = item.data.feedlink;
+						break;
+				}
+				stream.selectorChanged();
+//				selector.alpha = 1;
+				btnMentions.selected = btnMessages.selected = false;
+				selectionMenu.hide();
+			}
+			
+			protected function onClickBtn(type:String):void
+			{
+//				selector.alpha = 0.2;
+				
+				selector.selectedIndex = -1;
+				
+				btnMentions.selected = type == 'mention';
+				btnMessages.selected = type == 'message';
+				if ((type == 'mention' && filterType == 8) || (type == 'message' && filterType == 9)) return;
+				
+				filterType = type == 'mention' ? 8 : 9;
+				stream.selectorChanged();
+			}
+			
+			public function twitterDMUpdated(event:TwitterStreamEvent):void
+			{
+				checkTwitterMessage();
+			}
+			
+			public function checkTwitterMessage():void
+			{
+				if (filterType == 9) return;
+				var checkTimeRecv:Number = getLastCheckTwitterMessage('recv', userid);
+				
+				twitter.getReceivedDirectMessages(function(arr:Array):void {
+					if (arr && arr.length > 0 && arr[0].id)
+						updateTwitterMessageCount(arr.length);
+				}, checkTimeRecv < 0?NaN:checkTimeRecv+1);
+			}
+			
+			public function twitterMentionUpdated(event:Event):void
+			{
+				updateTwitterMentionCount(1);
+			}
+			
+			public function updateTwitterMentionCount(cnt:Number):void
+			{
+//				btnMessagesCnt.text.text = cnt > 0?(cnt > 10?'10+':cnt.toString()):'';
+				btnMentionsCnt.text.text = cnt > 0?('N'):'';
+				btnMentionsCnt.visible = cnt > 0;
+			}
+			
+			public function updateTwitterMessageCount(cnt:Number):void
+			{
+//				btnMessagesCnt.text.text = cnt > 0?(cnt > 10?'10+':cnt.toString()):'';
+				btnMessagesCnt.text.text = cnt > 0?('N'):'';
+				btnMessagesCnt.visible = cnt > 0;
+			}
+			
+			public function feedbackClick(event:Event):void
+			{
+				Base.navigateInBrowser('http://www.lazyscope.com/feedback.html'+(userid ? ('?userid='+userid) : ''));
+			}
+			
+			public function onClickMyProfileImage(e:Event):void
+			{
+				if (!selectionMenu) return;
+				selectionMenu.show();
+			}
+			
+			public function onOverMyProfileImage(e:Event=null):void
+			{
+				if (!selectionMenu || selectionMenu.visible) return;
+				profileFrame.color = 0xFFFDF0;
+			}
+			
+			public function onOutMyProfileImage(e:Event=null):void
+			{
+				if (!selectionMenu || selectionMenu.visible) return;
+				profileFrame.color = 0x92908E;
+			}
+
+			protected function button1_clickHandler(event:MouseEvent):void
+			{
+				Base.stream.stream.refresh();
+			}
+
+		]]>
+	</fx:Script>
+	
+	<s:Rect width="100%" top="0" height="1" left="0">
+		<s:fill>
+			<s:SolidColor color="0x999999" />
+		</s:fill>
+	</s:Rect>
+	
+	<s:Group height="30" width="100%">
+		<s:HGroup top="5" left="11" height="26" verticalAlign="bottom" gap="0">
+			<s:Group id="image" width="26" height="26" useHandCursor="true" click="onClickMyProfileImage(event)" rollOver="onOverMyProfileImage(event)" rollOut="onOutMyProfileImage(event)" toolTip=" Menu ">
+				<s:filters>
+					<s:DropShadowFilter distance="1" blurX="2" angle="90" alpha="0.75" />
+				</s:filters>
+				<s:Group width="26" height="26">
+					<lazyscope:CachedImage id="twitterProfile" width="22" height="22" left="2" top="2" />
+					<s:Rect width="25" height="25">
+						<s:stroke>
+							<s:SolidColorStroke id="profileFrame" color="0x92908E" weight="3" />
+						</s:stroke>
+					</s:Rect>
+					<s:mask>
+						<s:Graphic>
+							<s:Rect width="26" height="26" radiusX="2">
+								<s:fill>
+									<s:SolidColor color="0xFFFFFF" />
+								</s:fill>
+							</s:Rect>
+						</s:Graphic>
+					</s:mask>
+				</s:Group>
+			</s:Group>
+			
+			<!-- <s:Button label="test" click="button1_clickHandler(event)" /> -->
+			
+			
+			<mx:Spacer width="10" />
+			<control:ToggleBtn id="btnMentions" skinClass="com.lazyscope.control.ToggleBtnSkin" width="26" height="24" iconPrefix="mentions" click="onClickBtn('mention')" enabled="false" toolTip=" Mentions " />
+			<toolbar:Badge id="btnMentionsCnt" height="24" visible="false" click="onClickBtn('mention')" />
+			<mx:Spacer width="6" />
+			<control:ToggleBtn id="btnMessages" skinClass="com.lazyscope.control.ToggleBtnSkin" width="26" height="24" iconPrefix="messages" click="onClickBtn('message')" enabled="false" toolTip=" Messages " />
+			<toolbar:Badge id="btnMessagesCnt" height="24" visible="false" click="onClickBtn('message')" />
+			
+			<lazyscope:MemoryCheck />
+		</s:HGroup>
+
+		<s:HGroup right="10" top="6" gap="8">
+			<control:Btn id="btnFeedback" skinClass="com.lazyscope.control.BtnSkin" visible="false" width="111" height="24" iconPrefix="feedback" click="feedbackClick(event)" />
+			<s:Line id="lineFeedback" x="0" height="20" visible="false">
+				<s:stroke>
+					<s:SolidColorStroke weight="2" color="0x505050" alpha="1.0" />
+				</s:stroke>
+			</s:Line>
+
+			<control:Btn id="btnPost" skinClass="com.lazyscope.control.BtnSkin" width="26" height="24" iconPrefix="post" click="TweetWindow.post()" toolTip=" Post " />
+		</s:HGroup>
+	</s:Group>
+	
+	<s:Rect width="100%" bottom="0" height="1" left="0">
+		<s:fill>
+			<s:SolidColor color="0x7C7C7C" />
+		</s:fill>
+	</s:Rect>
+
+</lazyscope:Base>

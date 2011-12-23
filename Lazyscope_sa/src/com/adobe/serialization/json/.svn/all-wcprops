@@ -1,0 +1,41 @@
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/svn/p4/!svn/ver/8986/trunk/air/Scouter/src/com/adobe/serialization/json
+END
+JSONTokenizer.as
+K 25
+svn:wc:ra_dav:version-url
+V 89
+/svn/p4/!svn/ver/8986/trunk/air/Scouter/src/com/adobe/serialization/json/JSONTokenizer.as
+END
+JSONParseError.as
+K 25
+svn:wc:ra_dav:version-url
+V 90
+/svn/p4/!svn/ver/8986/trunk/air/Scouter/src/com/adobe/serialization/json/JSONParseError.as
+END
+JSONDecoder.as
+K 25
+svn:wc:ra_dav:version-url
+V 87
+/svn/p4/!svn/ver/8986/trunk/air/Scouter/src/com/adobe/serialization/json/JSONDecoder.as
+END
+JSONTokenType.as
+K 25
+svn:wc:ra_dav:version-url
+V 89
+/svn/p4/!svn/ver/8986/trunk/air/Scouter/src/com/adobe/serialization/json/JSONTokenType.as
+END
+JSON.as
+K 25
+svn:wc:ra_dav:version-url
+V 80
+/svn/p4/!svn/ver/8986/trunk/air/Scouter/src/com/adobe/serialization/json/JSON.as
+END
+JSONToken.as
+K 25
+svn:wc:ra_dav:version-url
+V 85
+/svn/p4/!svn/ver/8986/trunk/air/Scouter/src/com/adobe/serialization/json/JSONToken.as
+END

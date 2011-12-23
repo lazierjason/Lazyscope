@@ -1,0 +1,29 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+	
+<html xmlns="http://www.w3.org/1999/xhtml" onmousewheel="ContentViewer.onScroll(event); return false;">
+<head>
+	<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+	<title>
+		Preview viewer
+	</title>
+	<meta name="Nationality" content="English" />
+
+	<script type="text/javascript">
+		var $=function(id) {
+			return document.getElementById(id);
+		};
+		function setContent(str) {
+			$('content').innerHTML = str;
+		}
+	</script>
+</head>
+
+<body style="margin:0px; padding:0px;">
+	<div id="content" style="margin:0px;padding:0px;">
+<script type="text/javascript">
+if (window.renderHTML)
+	document.write(window.renderHTML);
+</script>
+	</div>
+</body>
+</html>

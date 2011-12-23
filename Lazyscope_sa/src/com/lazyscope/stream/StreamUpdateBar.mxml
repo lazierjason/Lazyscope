@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx" xmlns:stream="com.lazyscope.stream.*" height="0" minHeight="0" visible="false">
+
+	<fx:Declarations>
+		<fx:Boolean id="isStacked">false</fx:Boolean>
+		<s:Power id="ease" exponent="4" />
+		<stream:StreamList id="streamList" />
+		<fx:Number id="cnt" />
+		<s:Resize id="show" duration="1000" target="{this}" heightTo="35" effectStart="visible=true; alpha=1; isStacked=true;" easer="{ease}" />
+		<s:Resize id="hide" duration="500" target="{this}" heightTo="0" effectEnd="height=0; visible=false;" easer="{ease}" effectStart="isStacked=false" />
+		<s:Sequence id="blink" repeatCount="2" effectEnd="btn.alpha=1" effectStop="btn.alpha=1">
+			<s:children>
+				<s:Fade target="{btn}" duration="300" alphaFrom="1" alphaTo="0.3" /> 
+				<s:Fade target="{btn}" duration="200" alphaFrom="0.3" alphaTo="1" easer="{ease}" /> 
+			</s:children>
+		</s:Sequence>
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			
+			import mx.events.CollectionEvent;
+			
+			private var curCnt:Number = 0;
+			protected function btn_addedToStageHandler(event:Event):void
+			{
+				streamList.updateItem.addEventListener(CollectionEvent.COLLECTION_CHANGE, function(event:CollectionEvent):void {
+					if (streamList.scroller.viewport.verticalScrollPosition <= 10 && !isStacked && !Base.updateStack) {
+						return;
+					}
+					cnt = streamList.updateItem.length;
+					
+					if (curCnt != cnt) {
+						if (curCnt == 0 && cnt > 0 && !show.isPlaying && !visible) {
+							hide.stop();
+							//blink.stop();
+							alpha = 1;
+							
+							show.heightFrom = height;
+							show.play();
+						}else if (curCnt > 0 && cnt <= 0 && !hide.isPlaying && visible) {
+							show.stop();
+							//blink.stop();
+							alpha = 1;
+							
+							hide.heightFrom = height;
+							hide.play();
+						}else if (!blink.isPlaying && !show.isPlaying) {
+							show.stop();
+							hide.stop();
+							
+							visible = true;
+							height = 35;
+							
+							blink.play();
+						}
+					}
+					curCnt = cnt;
+				});
+			}
+
+			protected function btn_clickHandler(event:MouseEvent):void
+			{
+				streamList.updateItemFlush();
+				hide.play();
+			}
+
+		]]>
+	</fx:Script>
+	
+	<s:Button top="5" left="5" right="5" bottom="5" cornerRadius="0" label="{Base.updateStack ? ((cnt > 200?'200+':cnt)+' new update'+(cnt > 1?'s':'')) : ('Resume auto-scroll ('+(cnt > 200?'200+':cnt)+' new)')}" textAlignLast="center" id="btn" addedToStage="btn_addedToStageHandler(event)" click="btn_clickHandler(event)" />
+</s:Group>

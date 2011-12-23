@@ -1,0 +1,29 @@
+K 25
+svn:wc:ra_dav:version-url
+V 67
+/svn/p4/!svn/ver/9466/trunk/air/Scouter/src/com/hurlant/crypto/hash
+END
+SHABase.as
+K 25
+svn:wc:ra_dav:version-url
+V 78
+/svn/p4/!svn/ver/9466/trunk/air/Scouter/src/com/hurlant/crypto/hash/SHABase.as
+END
+HMAC.as
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/svn/p4/!svn/ver/8696/trunk/air/Scouter/src/com/hurlant/crypto/hash/HMAC.as
+END
+IHash.as
+K 25
+svn:wc:ra_dav:version-url
+V 76
+/svn/p4/!svn/ver/9466/trunk/air/Scouter/src/com/hurlant/crypto/hash/IHash.as
+END
+SHA1.as
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/svn/p4/!svn/ver/8783/trunk/air/Scouter/src/com/hurlant/crypto/hash/SHA1.as
+END

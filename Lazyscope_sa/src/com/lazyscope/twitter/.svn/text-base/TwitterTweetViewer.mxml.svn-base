@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx"
+		 xmlns:control="com.lazyfeed.control.*"
+		 creationComplete="onCreationComplete()"
+		 >
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyfeed.Base;
+			import com.lazyfeed.Util;
+			import com.lazyfeed.entry.StreamEntry;
+			import com.lazyfeed.stream.TweetRendererTwitterInUserInfo;
+			import com.swfjunkie.tweetr.data.objects.StatusData;
+			import com.swfjunkie.tweetr.data.objects.UserData;
+			
+			public var statusID:String = null;
+			[Bindable] public var isDoing:Boolean = false;
+			
+			public function onCreationComplete():void
+			{
+				scroller.addEventListener(MouseEvent.MOUSE_WHEEL, function(event:MouseEvent):void {
+					event.preventDefault();
+					if (event.delta == 0) return;
+					var d:Number = event.delta;
+					if (d > 0 && d > 3) d = 3;
+					else if (d < 0 && d < -3) d = -3;
+					scroller.viewport.verticalScrollPosition -= d * 15;
+				}, true, 100);
+			}
+			
+			public function init():void
+			{
+				clearCanvas();
+			}
+			
+			public function clearCanvas():void
+			{
+				tweets.removeAllElements();
+				tweetsSrc.removeAllElements();
+				tweetsSrcContainer.visible = false;
+				scroller.viewport.verticalScrollPosition = 0;
+			}
+			
+			public function showError():void
+			{
+				isDoing = false;
+				streamLoading.stop();
+				hide();
+				
+				Util.showWarning();
+			}
+			
+			
+			public function displayTweet(statusID:String, inReplyToTweet:StatusData = null):void
+			{
+				if (!id) return;
+				if (isDoing) return;
+				isDoing = true;
+				this.statusID = id;
+				streamLoading.start();
+				init();
+				show();
+				Base.twitter.getStatus(displayTweetCallback, statusID);
+				showSourceTweet(inReplyToTweet);
+			}
+			
+			public function displayTweetCallback(arr:Array):void
+			{
+				if (arr && arr.length > 0) {
+					var st:StatusData = arr[0] as StatusData;;
+					showTweet(st);
+					isDoing = false;
+					streamLoading.stop();
+				}else{
+					showError();
+				}
+			}
+			
+			public function show():void
+			{
+				Base.userViewer.hide();
+				visible = true;
+			}
+			
+			public function hide():void
+			{
+				visible = false;
+			}
+			
+			public function showSourceTweet(st:StatusData):void
+			{
+				if (st) {
+					var tweet:TweetRendererTwitterInUserInfo = new TweetRendererTwitterInUserInfo;
+					tweet.data = StreamEntry.twitter(st);
+					tweet.percentWidth=100;
+					tweet.bottomLine.visible = false;
+					tweetsSrc.addElement(tweet);
+					tweetsSrcContainer.visible = true;
+				}else{
+					tweetsSrcContainer.visible = false;
+				}
+			}
+			
+			public function showTweet(st:StatusData):void
+			{
+				var tweet:TweetRendererTwitterInUserInfo = new TweetRendererTwitterInUserInfo;
+				tweet.data = StreamEntry.twitter(st);
+				tweet.percentWidth=100;
+				tweets.addElement(tweet);
+			}
+			
+			private function onCloseClick(event:MouseEvent=null):void
+			{
+				hide();
+			}
+		]]>
+	</fx:Script>
+	
+	<s:BorderContainer borderVisible="false" backgroundColor="0x000000" backgroundAlpha="0.4" left="0" right="0" top="0" bottom="0" />
+	<s:BorderContainer borderColor="0xD9D9CD" borderWeight="1" backgroundColor="0xE4E4DA" left="10" right="10" top="10" bottom="10">
+		<s:Scroller id="scroller" width="100%" top="5" bottom="5" left="5" right="5">
+			<s:VGroup top="0" left="0" right="0" bottom="0" gap="10">
+				<s:BorderContainer borderColor="0xD9D9CD" backgroundColor="0xFFFFFF" borderWeight="1" height="{tweets.height}" width="100%">
+					<s:VGroup id="tweets" width="100%" />
+				</s:BorderContainer>
+				<s:BorderContainer id="tweetsSrcContainer" borderColor="0xE4E4DA" backgroundColor="0xE4E4DA" borderWeight="1" height="{tweetsSrc.height+20}" width="100%">
+					<s:Label top="4" left="4" text="in reply to ↑" color="0x88887F" fontSize="12" fontWeight="bold" lineHeight="14"/>
+					<s:VGroup id="tweetsSrc" width="100%" top="20" />
+				</s:BorderContainer>
+			</s:VGroup>
+		</s:Scroller>
+	</s:BorderContainer>
+	<s:BorderContainer borderColor="0xD9D9CD" borderWeight="1" backgroundColor="0xE4E4DA" left="10" right="10" top="10" bottom="10" visible="{isDoing}">
+		<control:Spinner id="streamLoading" scaleX="3" scaleY="3" horizontalCenter="0" left="50%" verticalCenter="0" top="50%" />
+	</s:BorderContainer>
+	
+	<s:Graphic id="closeBtn" width="20" height="20" right="2" top="3" click="onCloseClick(event)" buttonMode="true" useHandCursor="true" mouseChildren="true">
+		<s:Ellipse width="20" height="20">
+			<s:fill>
+				<s:SolidColor color="0x222222" />
+			</s:fill>
+			<s:stroke>
+				<s:SolidColorStroke weight="2" color="0xE4E4DA" />
+			</s:stroke>
+		</s:Ellipse>
+		<s:Line xFrom="6" xTo="14" yFrom="6" yTo="14">
+			<s:stroke>
+				<s:SolidColorStroke weight="3" color="0xF5F5F5" />
+			</s:stroke>
+		</s:Line>
+		<s:Line xFrom="6" xTo="14" yFrom="14" yTo="6">
+			<s:stroke>
+				<s:SolidColorStroke weight="3" color="0xF5F5F5" />
+			</s:stroke>
+		</s:Line>
+	</s:Graphic>
+</s:Group>

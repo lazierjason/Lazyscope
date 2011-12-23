@@ -1,0 +1,383 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Window xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  xmlns:mx="library://ns.adobe.com/flex/mx" width="382" height="500" visible="false"
+		  closing="onClosing(event)" creationComplete="onCreationComplete(event)"
+		  systemChrome="none" type="lightweight" transparent="true" showStatusBar="false" title="Lazyscope Notifier" alwaysInFront="true" alpha="0" backgroundAlpha="0">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			import com.lazyscope.ConfigDB;
+			import com.lazyscope.entry.BlogEntry;
+			import com.lazyscope.entry.StreamEntry;
+			
+			private var timerHide:uint = 0;
+			private var timerShow:uint = 0;
+			
+			public static var includeNotifier:Boolean = true;		// Do you want to use Notifier?
+			public static var displayPosition:String = 'rb';
+			
+			public static function loadConfig():void
+			{
+				var str:String = ConfigDB.get('lf_notifier_setting');
+				
+				if (Capabilities.os.substr(0, 5).toLowerCase() == 'linux') {
+					includeNotifier = false;
+					return;
+				}
+				
+				if (str == 'off')
+					includeNotifier = false;
+				else{
+					switch (str) {
+						case 'rt':
+						case 'lt':
+						case 'lb':
+							displayPosition = str;
+						break;
+						default:
+							displayPosition = 'rb';
+							break;
+					}
+				}
+			}
+			
+			public static function setConfig(str:String):void
+			{
+				includeNotifier = str != 'off';
+				if (includeNotifier)
+					displayPosition = str;
+				ConfigDB.set('lf_notifier_setting', str);
+			}
+			
+			public static function getConfig():Number
+			{
+				if (!includeNotifier) return 0;
+				switch (displayPosition) {
+					case 'lt':
+						return 1;
+						break;
+					case 'rt':
+						return 2;
+						break;
+					case 'lb':
+						return 3;
+						break;
+					default:
+						return 4;
+						break;
+				}
+			}
+
+			public static var updatedEntries:Array = null;
+			public static var _updatedEntries:Array = null;
+			public static var embeddedEntries:Object = {};
+			public static function addUpdateCache(e:StreamEntry):void
+			{
+				if (!NotifyWindow.includeNotifier || !e || e.type == 'FL') return;
+				if (e.type != 'T' && e.type != 'M' && e.type != 'B') {
+					trace('############### notification type:', e.type);
+					return;
+				}
+				if (e.type == 'T' && (!e.twitStatus || !e.twitStatus.id || !e.twitStatus.text)) return;
+				if (e.type == 'M' && (!e.twitMsg || !e.twitMsg.id || e.twitMsgIsSent || !e.twitMsg.text)) return;
+				if (e.type == 'B' && (!e.link || (!e.description && !e.displayDescription && !e.image))) return;
+						
+				if (!updatedEntries)
+					updatedEntries = [e];
+				else
+					updatedEntries.push(e);
+			}
+			
+			static public function notifyEmbeddedContent(id:String, e:StreamEntry):void
+			{
+				if (NotifyWindow.includeNotifier) {
+					embeddedEntries[id] = e;
+					if (Base.notifier.htmlView && Base.notifier.htmlView.domWindow.Notifier) {
+						var jsObj:Object = Base.notifier.htmlView.domWindow.Notifier;
+						if (!jsObj.embeddedEntries[id]
+							|| (!jsObj.embeddedEntries[id].image && e.image 
+								&& (!jsObj.entries
+									|| jsObj.entries.length <= 0 
+									|| jsObj.index >= jsObj.entries.length 
+									|| jsObj.index < 0 
+									|| jsObj.entries[jsObj.index].type == 'B' 
+									|| (jsObj.entries[jsObj.index].type == 'T' && jsObj.entries[jsObj.index].twitStatus.id != id)
+									|| (jsObj.entries[jsObj.index].type == 'M' && jsObj.entries[jsObj.index].twitMsg.id != id) ))) {
+							Base.notifier.htmlView.domWindow.Notifier.embeddedEntries[id] = e;
+						}
+						
+						try {
+							jsObj.refreshEntry();
+						}catch(e:Error){
+							trace(e.getStackTrace(), 'notifyEmbeddedContent');
+						}
+					}
+				}
+			}
+
+
+			private var timer:uint;
+			public function adjustHeight(h:Number):void
+			{
+				clearTimeout(timer);
+				timer = setTimeout(_adjustHeight, 0, h);
+			}
+			
+			private function _adjustHeight(h:Number):void
+			{
+				clearTimeout(timer);
+				htmlView.height = h+23;
+				
+				switch (displayPosition) {
+					case 'lt':
+						nativeWindow.x = Screen.mainScreen.visibleBounds.x;
+						nativeWindow.y = Screen.mainScreen.visibleBounds.y;
+						container.bottom = NaN;
+						container.top = 0;
+						break;
+					case 'lb':
+						nativeWindow.x = Screen.mainScreen.visibleBounds.x;
+						nativeWindow.y = Screen.mainScreen.visibleBounds.y + Screen.mainScreen.visibleBounds.height - height;
+						container.bottom = 0;
+						container.top = NaN;
+						break;
+					case 'rt':
+						nativeWindow.x = Screen.mainScreen.visibleBounds.x + Screen.mainScreen.visibleBounds.width - width;
+						nativeWindow.y = Screen.mainScreen.visibleBounds.y;
+						container.bottom = NaN;
+						container.top = 0;
+						break;
+					default:
+						nativeWindow.y = Screen.mainScreen.visibleBounds.y + Screen.mainScreen.visibleBounds.height - height;
+						nativeWindow.x = Screen.mainScreen.visibleBounds.x + Screen.mainScreen.visibleBounds.width - width;
+						container.bottom = 0;
+						container.top = NaN;
+						break;
+				}
+			}
+
+			private function onCreationComplete(event:Event):void
+			{
+				closeBtn.addEventListener(MouseEvent.CLICK, onCloseClick, false, 100);
+				
+				htmlView.domWindow._notifier = this;
+				
+				setTimeout(checkUpdate, 3000);
+			}
+			
+			public function onClickContent(e:Object):void
+			{
+				trace('CONTENT CLICKED!!!!!', activateMainWindow);
+				if (activateMainWindow != null)
+					activateMainWindow();
+				Base.stream.stream.updateItemFlush();
+				Base.contentViewer.show(BlogEntry(e), null);
+				Base.userViewer.hide();
+				Base.tweetViewer.hide();
+			}
+			
+			public var activateMainWindow:Function;
+			public function switchToMainWindow():void
+			{
+				trace('SWITCH TO MAIN!!!!!');
+				if (activateMainWindow != null)
+					activateMainWindow();
+				Base.stream.stream.updateItemFlush();
+				//Base.stream.notifier.update();
+				onCloseClick();
+			}
+			
+			private function checkUpdate():void
+			{
+				setTimeout(checkUpdate, 3000);
+				if (includeNotifier && !Base.isMainActivated) {
+					if (updatedEntries && !htmlView.domWindow.Notifier.entries) {
+						_updatedEntries = new Array;
+						var i:Number;
+						for (i = 0; i < updatedEntries.length; i++) {
+							switch (updatedEntries[i].type) {
+								case 'B':
+								case 'T':
+								case 'M':
+									_updatedEntries.push(updatedEntries[i]);
+							}
+						}
+						// Sorting
+						
+						if (_updatedEntries.length > 0) {
+							var ee:Object;
+							var bestIndex:Number = -1;
+							for (i = 0; i < _updatedEntries.length; i++) {
+								if (_updatedEntries[i].type == 'B')
+									ee = _updatedEntries[i];
+								else if (_updatedEntries[i].type == 'T' && _updatedEntries[i].twitStatus && _updatedEntries[i].twitStatus.id)
+									ee = embeddedEntries[_updatedEntries[i].twitStatus.id];
+								else if (_updatedEntries[i].type == 'M' && _updatedEntries[i].twitMsg && _updatedEntries[i].twitMsg.id)
+									ee = embeddedEntries[_updatedEntries[i].twitMsg.id];
+								else continue;
+								
+								if (ee) {
+									if (ee.image) {
+										bestIndex = i;
+										break;
+									}
+									bestIndex = i;
+								}else if (bestIndex < 0) {
+									if (_updatedEntries[i].twitStatus) {
+										if (_updatedEntries[i].twitStatus.retweetedStatus) {
+											if (_updatedEntries[i].twitStatus.retweetedStatus.links && _updatedEntries[i].twitStatus.retweetedStatus.links.length > 0) {
+												bestIndex = i;
+											}
+										}else if (_updatedEntries[i].twitStatus.links && _updatedEntries[i].twitStatus.links.length > 0) {
+											bestIndex = i;
+										}
+									}else if (_updatedEntries[i].twitMsg && _updatedEntries[i].twitMsg.links && _updatedEntries[i].twitMsg.links.length > 0) {
+										bestIndex = i;
+									}
+								}
+							}
+							if (bestIndex < 0) bestIndex = 0;
+							if (bestIndex > 0) {
+								var tmp:Object = _updatedEntries[0];
+								_updatedEntries[0] = _updatedEntries[bestIndex];
+								_updatedEntries[bestIndex] = tmp;
+							}
+							
+							htmlView.domWindow.Notifier.updateNotification(_updatedEntries, embeddedEntries);
+							show();
+						}
+						updatedEntries = null;
+					}
+				}else{
+					updatedEntries = null;
+					embeddedEntries = {};
+				}
+			}
+
+			private function onMouseOver(event:MouseEvent):void
+			{
+				if (timerHide)
+					clearTimeout(timerHide);
+				closeBtn.visible = true;
+			}
+
+			private function onMouseOut(event:MouseEvent):void
+			{
+				if (timerHide)
+					clearTimeout(timerHide);
+				timerHide = setTimeout(hide, 5000);
+				closeBtn.visible = false;
+			}
+
+			private function onClosing(event:Event):void
+			{
+				if (Base.exiting) return;
+				alpha = 0;
+				//visible = false;
+				event.preventDefault();
+			}
+			
+			private function onCloseClick(event:MouseEvent=null):void
+			{
+				if (event != null) {
+					event.preventDefault();
+					event.stopPropagation();
+				}
+				if (timerHide)
+					clearTimeout(timerHide);
+				hide(true);
+				closeBtn.visible = false;
+			}
+			
+			private function show():void
+			{
+				if (timerShow) return;
+				timerShow = setTimeout(_show, 5000);
+			}
+			
+			private function _show():void
+			{
+				timerShow = 0;
+				if (timerHide)
+					clearTimeout(timerHide);
+				timerHide = setTimeout(hide, 7500);
+				
+				if (Base.isMainActivated) return;
+
+				if (!visible)
+//					super.visible = true;
+					visible = true;
+				alpha = 1;
+				stage.focus = htmlView;
+			}
+
+
+			public function hide(noChangeVisible:Boolean=false):void
+			{
+				//visible = false;
+				alpha = 0;
+				if (Base.isMainActivated && !noChangeVisible)
+//					super.visible = false;
+					visible = false;
+				if (htmlView && htmlView.domWindow && htmlView.domWindow.Notifier) {
+					htmlView.domWindow.Notifier.entries = null;
+					htmlView.domWindow.Notifier.embeddedEntries = {};
+					if (htmlView.domWindow.Notifier.div && htmlView.domWindow.Notifier.div.main)
+						htmlView.domWindow.Notifier.div.main.innerHTML = '';
+				}
+			}
+
+//			private var visibleTimer:uint;
+//			override public function set visible(value:Boolean):void
+//			{
+//				clearTimeout(visibleTimer);
+//				var a:Object = super;
+//				visibleTimer = setTimeout(function():void {
+//					a.visible = value;
+//					if (!value)
+//						hide();
+//				}, 100);
+//			}
+//			
+//			override public function get visible():Boolean
+//			{
+//				return super.visible;
+//			}
+		]]>
+	</fx:Script>
+	
+	
+
+	<s:Group id="container" width="100%" bottom="0" rollOver="onMouseOver(event)" rollOut="onMouseOut(event)">
+		<s:Rect radiusX="5" radiusY="5" left="2" top="1" right="2" bottom="2">
+			<s:fill>
+				<s:SolidColor color="0xFAFAFA" />
+			</s:fill>
+			<s:filters>
+				<s:DropShadowFilter angle="90" distance="1" strength="2" />
+			</s:filters>
+		</s:Rect>
+		<mx:HTML id="htmlView" left="4" top="3" bottom="4" right="4" location="app:///html/Notifier.html" contentBackgroundAlpha="0" />
+		
+		<s:Graphic id="closeBtn" width="14" height="14" right="5" top="5" visible="false" buttonMode="true" useHandCursor="true" mouseChildren="true">
+			<s:Ellipse width="14" height="14">
+				<s:fill>
+					<s:SolidColor color="0x222222" />
+				</s:fill>
+			</s:Ellipse>
+			<s:Line width="6" height="6" xFrom="4" xTo="10" yFrom="4" yTo="10">
+				<s:stroke>
+					<s:SolidColorStroke weight="2" color="0xEEEEEE" />
+				</s:stroke>
+			</s:Line>
+			<s:Line width="6" height="6" xFrom="4" xTo="10" yFrom="10" yTo="4">
+				<s:stroke>
+					<s:SolidColorStroke weight="2" color="0xEEEEEE" />
+				</s:stroke>
+			</s:Line>
+		</s:Graphic>
+	</s:Group>
+	
+</s:Window>

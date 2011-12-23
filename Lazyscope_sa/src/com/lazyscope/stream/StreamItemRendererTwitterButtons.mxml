@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  xmlns:mx="library://ns.adobe.com/flex/mx"
+		  xmlns:lazyscope="com.lazyscope.*"
+		  left="0" right="0" height="49" backgroundColor="0x44BA00" borderVisible="false">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			import com.lazyscope.Util;
+			import com.lazyscope.entry.StreamEntry;
+			import com.lazyscope.twitter.TweetWindow;
+			import com.lazyscope.twitter.Twitter;
+			import com.swfjunkie.tweetr.data.objects.StatusData;
+			
+			import spark.components.Group;
+			public static var btn:StreamItemRendererTwitterButtons = new StreamItemRendererTwitterButtons;
+			public static var data:StreamEntry;
+			public static var _container:Group;
+			
+			public static function show(container:Group=null, d:Object=null):void
+			{
+				if (container == null)
+					container = _container;
+				else
+					_container = container;
+				if (!container) return;
+				
+				///// NEED TO CHECK following 'data'
+				if (d == null)
+					d = data;
+				if (!d) return;
+				
+				var p:Group = btn.parent as Group;
+//				if (p == container) return;
+				if (p)
+					p.includeInLayout = false; 
+
+				
+				data = d as StreamEntry;
+
+				btn.visible = false;
+				container.addElement(btn);
+
+//				Base.stream.stream.setFocus();
+//				Base.app.setFocus();
+
+				switch (data.type) {
+					case 'T':
+						if (!data.twitStatus) return;
+						
+						if (data.twitStatus.user.id == Twitter.session().userid) {
+							btn.btnDelete.visible = btn.btnDelete.includeInLayout = true;
+							btn.btnRepost.visible = btn.btnRepost.includeInLayout = false;
+							btn.btnRetweet.visible = btn.btnRetweet.includeInLayout = false;
+						}else{
+							btn.btnDelete.visible = btn.btnDelete.includeInLayout = false;
+							btn.btnRepost.visible = btn.btnRepost.includeInLayout = true;
+							
+							//TODO: private, retweeted must not be shown
+							if (data.twitStatus.user.profileProtected || data.twitStatus.retweetedByMe)
+								btn.btnRetweet.visible = btn.btnRetweet.includeInLayout = false;
+							else
+								btn.btnRetweet.visible = btn.btnRetweet.includeInLayout = true;
+						}
+						
+						if (data.twitStatus.favorited) {
+							btn.btnFavorite.visible = btn.btnFavorite.includeInLayout = false;
+							btn.btnUnfavorite.visible = btn.btnUnfavorite.includeInLayout = true;
+						}else{
+							btn.btnFavorite.visible = btn.btnFavorite.includeInLayout = true;
+							btn.btnUnfavorite.visible = btn.btnUnfavorite.includeInLayout = false;
+						}
+						
+						btn.btnReply.visible = btn.btnReply.includeInLayout = true;
+						
+						break;
+					case 'M':
+						if (!data.twitMsg) return;
+						
+						btn.btnFavorite.visible = btn.btnFavorite.includeInLayout = false;
+						btn.btnUnfavorite.visible = btn.btnUnfavorite.includeInLayout = false;
+						btn.btnRepost.visible = btn.btnRepost.includeInLayout = false;
+						btn.btnRetweet.visible = btn.btnRetweet.includeInLayout = false;
+						btn.btnDelete.visible = btn.btnDelete.includeInLayout = true;
+						
+						if (data.twitMsgIsSent)
+							btn.btnReply.visible = btn.btnReply.includeInLayout = false;
+						else
+							btn.btnReply.visible = btn.btnReply.includeInLayout = true;
+						
+						break;
+					case 'B':
+						btn.btnDelete.visible = btn.btnDelete.includeInLayout = false;
+						btn.btnReply.visible = btn.btnReply.includeInLayout = false;
+						btn.btnRepost.visible = btn.btnRepost.includeInLayout = true;
+						btn.btnRetweet.visible = btn.btnRetweet.includeInLayout = false;
+						
+						if (Base.favoriteLinkListHash[data.link]) {
+							btn.btnFavorite.visible = btn.btnFavorite.includeInLayout = false;
+							btn.btnUnfavorite.visible = btn.btnUnfavorite.includeInLayout = true;
+						}else{
+							btn.btnFavorite.visible = btn.btnFavorite.includeInLayout = true;
+							btn.btnUnfavorite.visible = btn.btnUnfavorite.includeInLayout = false;
+						}
+						break;
+					case 'FL':
+						btn.btnDelete.visible = btn.btnDelete.includeInLayout = false;
+						btn.btnReply.visible = btn.btnReply.includeInLayout = false;
+						btn.btnRepost.visible = btn.btnRepost.includeInLayout = true;
+						btn.btnRetweet.visible = btn.btnRetweet.includeInLayout = false;
+						btn.btnFavorite.visible = btn.btnFavorite.includeInLayout = false;
+						btn.btnUnfavorite.visible = btn.btnUnfavorite.includeInLayout = true;
+						break;
+				}
+				
+				btn.visible = true;
+				container.includeInLayout = true;
+			}
+			
+			public static function hide():void
+			{
+				data = null;
+				var p:Group = btn.parent as Group;
+				if (p) {
+					p.removeElement(btn);
+					p.includeInLayout = false; 
+				}
+			}
+			
+			public static function reply(event:Event, d:StreamEntry=null):void
+			{
+				if (!d) d = data;
+				if (!d) return;
+				
+				switch (d.type) {
+					case 'T':
+						Base.contentContainer.callLater(function():void {
+							if (d.twitStatus.retweetedStatus)
+								TweetWindow.post(null, d.twitStatus.id, '@'+d.twitStatus.retweetedStatus.user.screenName+' ');
+							else
+								TweetWindow.post(null, d.twitStatus.id, '@'+d.twitStatus.user.screenName+' ');
+						});
+						break;
+					case 'M':
+						Base.contentContainer.callLater(function():void {
+							TweetWindow.post(null, null, 'd '+d.twitMsg.senderScreenName+' ');
+						});
+						break;
+				}
+				if (event)
+					event.stopPropagation();
+				
+			}
+			
+			public static function repost(event:Event, d:StreamEntry=null):void
+			{
+				if (!data && !d) return;
+				if (!d && data) d=data;
+				
+				if (d.type == 'T') {
+					var st:StatusData = d.twitStatus.retweetedStatus ? d.twitStatus.retweetedStatus : d.twitStatus;
+					
+					var text:String = Util.trim(st.text, true) + ' via @' + st.user.screenName;
+					
+					Base.contentContainer.callLater(function():void {
+						TweetWindow.post(text, null);		// auto shorten url is enabled
+					});
+				}else if (d.type == 'B') {
+					Base.contentViewer.toPost(d.link, d.title, d);
+				}
+				
+				if (event)
+					event.stopPropagation();
+			}
+			
+			public static function del(event:Event=null):void
+			{
+				if (!data) return;
+				
+				Base.stream.deleteTwitter(data.renderer, data);
+				if (event)
+					event.stopPropagation();
+			}
+			
+			public static function favorite(event:Event=null):void
+			{
+				if (!data) return;
+				
+				if (data.type == 'T') {
+					Base.stream.favoriteTwitter(data.renderer, data, true);
+				}else if (data.type == 'B') {
+					Base.stream.favoriteLink(data.renderer, data, true);
+				}
+				
+				if (event)
+					event.stopPropagation();
+				
+				btn.btnFavorite.visible = btn.btnFavorite.includeInLayout = false;
+				btn.btnUnfavorite.visible = btn.btnUnfavorite.includeInLayout = true;
+			}
+
+			public static function unfavorite(event:Event=null):void
+			{
+				if (!data) return;
+
+				if (data.type == 'T') {
+					Base.stream.favoriteTwitter(data.renderer, data, false);
+				}else if (data.type == 'B' || data.type == 'FL') {
+					Base.stream.favoriteLink(data.renderer, data, false);
+				}
+				
+				if (event)
+					event.stopPropagation();
+
+				btn.btnFavorite.visible = btn.btnFavorite.includeInLayout = true;
+				btn.btnUnfavorite.visible = btn.btnUnfavorite.includeInLayout = false;
+			}
+
+			public static function retweet(event:Event):void
+			{
+				if (!data) return;
+				Base.stream.retweetTwitter(data.renderer, data);
+				if (event)
+					event.stopPropagation();
+//				btn.btnRetweet.visible = btn.btnFavorite.includeInLayout = true;
+//				btn.btnRetweet.visible = btn.btnUnfavorite.includeInLayout = false;
+			}
+		]]>
+	</fx:Script>
+	
+	<s:HGroup verticalAlign="top" lineHeight="13" left="3" right="3" top="3" gap="4">
+		<s:BorderContainer id="btnReply" height="43" width="50" borderVisible="false" backgroundAlpha="0" cornerRadius="2" backgroundColor="0xF7F7F5" click="reply(event)" rollOver="btnReply.setStyle('backgroundAlpha', 1)" rollOut="btnReply.setStyle('backgroundAlpha', 0)" buttonMode="true" useHandCursor="true">
+			<lazyscope:CachedImage source="button/reply.png" width="24" height="26" top="2" horizontalCenter="0" left="0" />
+			<s:Label text="Reply" fontSize="10" color="0x333333" top="32" horizontalCenter="0" left="0" />
+		</s:BorderContainer>
+		<s:BorderContainer id="btnRepost" height="43" width="50" borderVisible="false" backgroundAlpha="0" cornerRadius="2" backgroundColor="0xF7F7F5" click="repost(event)" rollOver="btnRepost.setStyle('backgroundAlpha', 1)" rollOut="btnRepost.setStyle('backgroundAlpha', 0)" buttonMode="true" useHandCursor="true">
+			<lazyscope:CachedImage source="button/repost.png" width="22" height="28" top="1" horizontalCenter="0" left="0" />
+			<s:Label text="Repost" fontSize="10" color="0x333333" top="32" horizontalCenter="0" left="0" />
+		</s:BorderContainer>
+		<s:BorderContainer id="btnRetweet" height="43" width="50" borderVisible="false" backgroundAlpha="0" cornerRadius="2" backgroundColor="0xF7F7F5" click="retweet(event)" rollOver="btnRetweet.setStyle('backgroundAlpha', 1)" rollOut="btnRetweet.setStyle('backgroundAlpha', 0)" buttonMode="true" useHandCursor="true">
+			<lazyscope:CachedImage source="button/retweet.png" width="28" height="20" top="5" horizontalCenter="0" left="0" />
+			<s:Label text="Retweet" fontSize="10" color="0x333333" top="32" horizontalCenter="0" left="0" />
+		</s:BorderContainer>
+		<s:BorderContainer id="btnFavorite" height="43" width="50" borderVisible="false" backgroundAlpha="0" cornerRadius="2" backgroundColor="0xF7F7F5" click="favorite(event)" rollOver="btnFavorite.setStyle('backgroundAlpha', 1)" rollOut="btnFavorite.setStyle('backgroundAlpha', 0)" buttonMode="true" useHandCursor="true">
+			<lazyscope:CachedImage source="button/favorite.png" width="26" height="26" top="2" horizontalCenter="0" left="0" />
+			<s:Label text="Favorite" fontSize="10" color="0x333333" top="32" horizontalCenter="0" left="0" />
+		</s:BorderContainer>
+		<s:BorderContainer id="btnUnfavorite" height="43" width="50" borderVisible="false" backgroundAlpha="0" cornerRadius="2" backgroundColor="0xF7F7F5" click="unfavorite(event)" rollOver="btnUnfavorite.setStyle('backgroundAlpha', 1)" rollOut="btnUnfavorite.setStyle('backgroundAlpha', 0)" buttonMode="true" useHandCursor="true">
+			<lazyscope:CachedImage source="button/unfavorite.png" width="21" height="26" top="2" horizontalCenter="0" left="0" />
+			<s:Label text="Unfavorite" fontSize="10" color="0x333333" top="32" horizontalCenter="0" left="0" />
+		</s:BorderContainer>
+		<s:BorderContainer id="btnDelete" height="43" width="50" borderVisible="false" backgroundAlpha="0" cornerRadius="2" backgroundColor="0xF7F7F5" click="del(event)" rollOver="btnDelete.setStyle('backgroundAlpha', 1)" rollOut="btnDelete.setStyle('backgroundAlpha', 0)" buttonMode="true" useHandCursor="true">
+			<lazyscope:CachedImage source="button/delete.png" width="22" height="24" top="3" horizontalCenter="0" left="0" />
+			<s:Label text="Delete" fontSize="10" color="0x333333" top="32" horizontalCenter="0" left="0" />
+		</s:BorderContainer>
+<!--
+		<s:HGroup id="btnReply" click="reply(event)" alpha="0.5" rollOver="btnReply.alpha=1" rollOut="btnReply.alpha=0.5" buttonMode="true" useHandCursor="true" gap="3">
+			<s:Group width="11">
+				<lazyscope:CachedImage source="button/reply_over.png" width="11" height="12" top="3" />
+			</s:Group>
+			<s:Label text="Reply" styleName="font11" color="0xEEEEEE" height="16" paddingTop="4" />
+		</s:HGroup>
+		<s:HGroup id="btnRepost" click="repost(event)" alpha="0.5" rollOver="btnRepost.alpha=1" rollOut="btnRepost.alpha=0.5" buttonMode="true" useHandCursor="true" gap="3">
+			<s:Group width="14">
+				<lazyscope:CachedImage source="button/retweet_over.png" width="14" height="8" top="4" />
+			</s:Group>
+			<s:Label text="Repost" styleName="font11" color="0xEEEEEE" height="16" paddingTop="4" />
+		</s:HGroup>
+		<s:HGroup id="btnRetweet" click="retweet(event)" alpha="0.5" rollOver="btnRetweet.alpha=1" rollOut="btnRetweet.alpha=0.5" buttonMode="true" useHandCursor="true" gap="3">
+			<s:Group width="14">
+				<lazyscope:CachedImage source="button/retweet_over.png" width="14" height="8" top="4" />
+			</s:Group>
+			<s:Label text="Retweet" styleName="font11" color="0xEEEEEE" height="16" paddingTop="4" />
+		</s:HGroup>
+		<s:HGroup id="btnDelete" click="del(event)" alpha="0.5" visible="false" rollOver="btnDelete.alpha=1" rollOut="btnDelete.alpha=0.5" buttonMode="true" useHandCursor="true" gap="3">
+			<s:Group width="9">
+				<lazyscope:CachedImage source="button/delete_over.png" width="9" height="10" top="3" />
+			</s:Group>
+			<s:Label text="Delete" styleName="font11" color="0xEEEEEE" height="16" paddingTop="4" />
+		</s:HGroup>
+		<s:HGroup id="btnFavorite" click="favorite(event)" alpha="0.5" rollOver="btnFavorite.alpha=1" rollOut="btnFavorite.alpha=0.5" buttonMode="true" useHandCursor="true" gap="3">
+			<s:Group width="15">
+				<lazyscope:CachedImage source="button/favorite_over.png" width="15" height="15" top="0" />
+			</s:Group>
+			<s:Label text="Favorite" styleName="font11" color="0xEEEEEE" height="16" paddingTop="4" />
+		</s:HGroup>
+		<s:HGroup id="btnUnfavorite" click="unfavorite(event)" alpha="0.5" rollOver="btnUnfavorite.alpha=1" rollOut="btnUnfavorite.alpha=0.5" buttonMode="true" useHandCursor="true" gap="3">
+			<s:Group width="15">
+				<lazyscope:CachedImage source="button/unfavorite_over.png" width="15" height="15" top="0" />
+			</s:Group>
+			<s:Label text="Unfavorite" styleName="font11" color="0xEEEEEE" height="16" paddingTop="4" />
+		</s:HGroup>
+-->
+	</s:HGroup>
+</s:BorderContainer>

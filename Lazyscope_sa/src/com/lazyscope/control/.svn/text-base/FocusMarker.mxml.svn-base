@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx"
+		 width="100%" left="0" top="0" bottom="0">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyfeed.stream.StreamItemRenderer;
+			import com.lazyfeed.stream.StreamItemRendererTwitterButtons;
+			
+			public static var focusMarker:FocusMarker = new FocusMarker;
+			
+			public static function addTo(p:StreamItemRenderer):void {
+				if (!p) return;
+				try{
+					StreamItemRendererTwitterButtons.hide();
+					p.addElement(focusMarker);
+//					Base.stream.stream.setFocus();
+//					Base.app.setFocus();
+					if (p['btns']) {
+						StreamItemRendererTwitterButtons.show(p['btns'] as Group, p.data);
+					}
+				}catch(e:*){}
+			}
+			
+			public static function removeFrom(p:StreamItemRenderer):void {
+				if (!p) return;
+				try{
+					p.removeElement(focusMarker);
+					StreamItemRendererTwitterButtons.hide();
+				}catch(e:*){}
+			}
+		]]>
+	</fx:Script>
+	
+	<s:Rect x="1" y="1" width="100%" height="100%">
+		<s:stroke>
+			<s:SolidColorStroke weight="3" color="0x44BA00" alpha="1.0" />
+		</s:stroke>
+	</s:Rect>
+</s:Group>

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx"
+		 autoLayout="true"
+		 height="0"
+		 visible="false" clipAndEnableScrolling="true">
+	
+	<fx:Declarations>
+		<s:Power id="ease" exponent="4" />
+		<s:Resize id="moveIn" duration="500" target="{this}" heightTo="26" effectStart="this.visible=true" easer="{ease}" />
+		<s:Resize id="moveOut" duration="500" target="{this}" heightTo="0" effectEnd="this.visible=false" easer="{ease}" />
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			import com.lazyscope.entry.StreamEntry;
+			
+			import mx.core.WindowedApplication;
+			
+			[Bindable]
+			public var updatedCount:Number = 0;
+			
+			public function clear():void
+			{
+				updatedCount = 0;
+				try{
+					//NativeApplication.nativeApplication.activeWindow.title = 'Lazyscope';
+				}catch(e:Error){
+					trace(e.getStackTrace(), 'clear streamnotify');
+				}
+				if (moveIn.isPlaying)
+					moveIn.stop();
+				if (moveOut.isPlaying)
+					moveOut.stop();
+				moveOut.play();
+			}
+			
+			public function updateCount(cnt:Number):void
+			{
+				updatedCount += cnt;
+
+				callLater(function():void {
+					try{
+						//NativeApplication.nativeApplication.activeWindow.title = '('+(updatedCount)+') Lazyscope';
+					}catch(e:Error){
+						trace(e.getStackTrace(), 'updateCount streamnotify');
+					}
+				});
+				
+				if (!visible) {
+					if (moveIn.isPlaying)
+						moveIn.stop();
+					if (moveOut.isPlaying)
+						moveOut.stop();
+					moveIn.play();
+				}
+			}
+			
+			public function update():void
+			{
+				clear();
+				Base.stream.stream.refresh(true);
+			}
+		]]>
+	</fx:Script>
+	
+	<s:BorderContainer width="100%" height="30" bottom="2" backgroundColor="0xf1f78f" borderVisible="false" alpha="0.8">
+		<s:filters>
+			<s:DropShadowFilter angle="90" distance="1" blurX="2" blurY="2" alpha="0.85" color="0x000000" strength="1" />
+		</s:filters>
+	</s:BorderContainer>
+	<s:RichText
+		id="message" textDecoration="underline" fontWeight="bold" click="update()"
+		text="{updatedCount+' new update'+(updatedCount > 1?'s':'')}" useHandCursor="true"
+		buttonMode="true" mouseChildren="true"
+		width="100%" color="0x000000" fontSize="13" paddingTop="7"
+		paddingLeft="7" paddingRight="7" maxDisplayedLines="1" />
+</s:Group>

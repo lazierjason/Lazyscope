@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx"
+		 borderVisible="false"
+		 >
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.content.ContentSnapshot;
+			import com.lazyscope.content.ContentViewer;
+			import com.lazyscope.crawl.Feed;
+			import com.lazyscope.notifier.NotifyWindow;
+			import com.lazyscope.sidebar.Sidebar;
+			import com.lazyscope.sidebar.Topbar;
+			import com.lazyscope.stream.StreamCollection;
+			import com.lazyscope.stream.StreamContainer;
+			import com.lazyscope.toolbar.NotifyBar;
+			import com.lazyscope.toolbar.ToolbarContainer;
+			import com.lazyscope.twitter.Twitter;
+			import com.lazyscope.twitter.TwitterStream;
+			import com.lazyscope.twitter.TwitterTweetViewer;
+			import com.lazyscope.twitter.TwitterUserViewer;
+			import com.swfjunkie.tweetr.data.objects.ListData;
+			
+			import mx.collections.ArrayCollection;
+			
+			public static var isMainActivated:Boolean = true;
+			
+			public static var exiting:Boolean = false;
+			
+			public var db:DB = DB.session();
+			
+			[Bindable] public static var twitter:Twitter = Twitter.session();
+			
+			public static var twitterUpdater:TwitterStream = new TwitterStream;
+			
+			public static var feed:Feed;
+			
+			public static var app:Lazyscope_sa;
+			public static var contentContainer:BorderContainer;
+			public static var stream:StreamContainer;
+			public static var sidebar:Sidebar;
+			public static var topbar:Topbar;
+			public static var contentViewer:ContentViewer;
+			public static var notifier:NotifyWindow;
+			public static var snapshot:ContentSnapshot;
+			public static var landing:Landing;
+			public static var userViewer:TwitterUserViewer;
+			public static var tweetViewer:TwitterTweetViewer;
+			
+			public static var filterType:Number = 1;
+			public static var filterLink:String;
+			public static var filterListData:ListData;
+			
+			public static var showOPMLImport:Function;
+			
+			public static var timeStart:Number = new Date().getTime();
+			
+			public static var navigateInBrowser:Function;
+			
+			public static var blogList:Array = new Array;
+			public static var favoriteLinkList:StreamCollection = new StreamCollection;
+			public static var favoriteLinkListHash:Object = new Object;
+			public static var notifyBar:Array = new Array;
+			
+			[Bindable] public static var updateStack:Boolean = false;
+			public static var mouseMoving:Boolean = false;
+			
+			[Bindable] public static var selectorData:ArrayCollection = new ArrayCollection;
+			
+			public static function init(s:StreamContainer, t:Sidebar, tb:Topbar, c:ContentViewer, cc:BorderContainer, n:NotifyWindow, ld:Landing, opml:Function, navi:Function, uv:TwitterUserViewer, tv:TwitterTweetViewer):void
+			{
+				stream = s;
+				sidebar = t;
+				topbar = tb;
+				contentViewer = c;
+				contentContainer = cc;
+				notifier = n;
+				landing = ld;
+				showOPMLImport = opml;
+				navigateInBrowser = navi;
+				userViewer = uv;
+				tweetViewer = tv;
+				
+				feed = Feed.session();
+				
+				favoriteLinkList.uniqKey = 'link';
+				favoriteLinkList.setSort([['registered', true, false]]);
+			}
+			
+			public static function get filterIsTwitter():Boolean
+			{
+				switch (filterType) {
+					case 1:
+					case 2:
+					case 4:
+					case 5:
+					case 8:
+					case 9:
+					case 10:
+						return true;
+						break;
+				}
+				return false;
+			}
+			
+			public static function get ready():Boolean
+			{
+				return twitter.ready;
+			}
+			
+			public static function get userid():String
+			{
+				return twitter.userid;
+			}
+			
+			public static function get screenName():String
+			{
+				return twitter.screenName;
+			}
+			
+			protected function registerHandler():void
+			{
+				twitter.addEventListener(Event.COMPLETE, twitterComplete, false, 0, true);
+				twitter.addEventListener(Event.CANCEL, twitterCancel, false, 0, true);
+			}
+			
+			protected function twitterComplete(event:Event):void {}
+			protected function twitterCancel(event:Event):void {}
+
+			public function pushNotifyBar(notify:NotifyBar, name:String):void
+			{
+				notify.name = name;
+				notifyBar.push(notify);
+			}
+
+			public function notify(msg:String):void
+			{
+				for (var i:Number=0; i < notifyBar.length; i++) {
+					NotifyBar(notifyBar[i]).htmlText = msg;
+				}
+			}
+			
+			public function setLastCheckTwitterMessage(type:String, user:String, val:Number):void
+			{
+				ConfigDB.set('TW_MSG_TIME_'+type+'_'+user, val.toString());
+			}
+			
+			public function getLastCheckTwitterMessage(type:String, user:String):Number
+			{
+				if (!user) return -1;
+				
+				var timeS:String = ConfigDB.get('TW_MSG_TIME_'+type+'_'+user);
+				var time:Number = timeS?Number(timeS):0;
+				if (time <= 0) {
+					ConfigDB.set('TW_MSG_TIME_'+type+'_'+user, '-1');
+					return -1;
+				}
+				return time;
+			}
+			
+			public static function setFocus():void
+			{
+				if (NativeApplication.nativeApplication.activeWindow && NativeApplication.nativeApplication.activeWindow.title == 'Lazyscope Notifier') {
+					Base.app.activate();
+				}
+			}
+			
+			
+		]]>
+	</fx:Script>
+</s:BorderContainer>

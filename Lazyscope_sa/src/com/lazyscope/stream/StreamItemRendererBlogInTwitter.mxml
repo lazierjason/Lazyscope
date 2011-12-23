@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<stream:StreamItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+						   xmlns:s="library://ns.adobe.com/flex/spark" 
+						   xmlns:mx="library://ns.adobe.com/flex/mx" xmlns:stream="com.lazyscope.stream.*"
+						   rollOver="onOver();" rollOut="onOut();"
+						   useHandCursor="true" click="onClick(true)" xmlns:lazyscope="com.lazyscope.*" autoDrawBackground="true">
+
+	<fx:Declarations>
+		<!--
+		<s:Animate id="showEffect" duration="1000" target="{this}" effectEnd="showEffectEnd()">
+			<s:SimpleMotionPath id="showEffectMotion" property="height" />
+		</s:Animate>
+		-->
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			import com.lazyscope.CachedImage;
+			import com.lazyscope.Util;
+			import com.lazyscope.entry.BlogEntry;
+			import com.lazyscope.entry.StreamEntry;
+			
+			import mx.events.FlexEvent;
+			
+			override public function set data(value:Object):void
+			{
+				try{
+				if (!value || !value.link) {
+					try{
+						imageContainer.removeAllElements();
+						displayDescription.removeAllElements();
+						title.text = null;
+						description.text = null;
+					}catch(err:Error) {
+						trace(err.getStackTrace(), 'set data render blog in tw');
+					}
+					
+					super.data = value;
+					return;
+				}
+				var e:StreamEntry = value as StreamEntry;
+				
+				if (super.data && StreamEntry(super.data).sid == e.sid) return;
+				super.data = value;
+				
+				//opaqueBackground = e.isUpdated?0xF4FAFD:null;
+				//setStyle('alternatingItemColors', e.isUpdated?bgcolorN:bgcolor);
+				
+				if (!imageCandidates || imageCandidates.length <= 0) {
+					imageCandidates = Util.extractImageURL(e.displayContent?e.displayContent:e.content);
+					if (imageCandidates && imageCandidates.length > 0) {
+						if (e.image) {
+							var p:int = imageCandidates.indexOf(e.image);
+							if (p >= 0)
+								imageCandidates.splice(p, 1);
+						}else{
+							e.image = imageCandidates.shift();
+						}
+					}
+				}
+
+				if (e.image) {
+					var thisObj:Object = this;
+					
+					var img:CachedImage = new CachedImage;
+					img.maxWidth = 130;
+					img.maxHeight = 100;
+					//trace('e.image', e.image);
+					
+					img.addEventListener(FlexEvent.READY, imgComplete, false, 0, true);
+					img.addEventListener(SecurityErrorEvent.SECURITY_ERROR, imgError, false, 0, true);
+					img.addEventListener(IOErrorEvent.IO_ERROR, imgError, false, 0, true);
+					
+					img.source = e.image;
+					imageContainer.addElement(img);
+					imageContainer.width = img.width;
+					imageContainer.height = img.height;
+				}else{
+					if (imageContainer.numElements > 0)
+						imageContainer.removeAllElements();
+				}
+				
+
+				var m:Array = e.link ? e.link.match(/^https?:\/\/(www\.)?([^\/]+)(\/|$)/) : null;
+				var blogHost:String = m ? m[2] : '';
+				
+				if (e.blog && e.blog.title) {
+					blog.text = Util.htmlEntitiesDecode(e.blog.title).replace(/\s+/g, ' ').replace(/<[^>]+>/g, '');;
+					blogURL.text = (blogHost ? ' ('+blogHost+')' : '');
+				}else{
+					blog.text = blogHost ? blogHost : '';
+					blogURL.text = '';
+				}
+				
+//if (e.source != 'lf') title.setStyle('color', 0xb40000);
+
+				title.text = Util.htmlEntitiesDecode(e.title).replace(/\s+/g, ' ').replace(/<[^>]+>/g, '');;
+				if (e.displayDescription) {
+					displayDescription.visible = true;
+					description.visible = false;
+					displayDescription.addElement(e.displayDescription);
+					description.text = '';
+				}else{
+					displayDescription.visible = false;
+					description.visible = true;
+					if (displayDescription.numElements > 0)
+						displayDescription.removeAllElements();
+					description.text = Util.htmlEntitiesDecode(e.description).replace(/\s+/g, ' ');
+				}
+				
+				}catch(e:Error) {
+					trace(e.getStackTrace(), 'set data render blog in tw2');
+				}
+			}
+			
+			override public function onClick(forceOpen:Boolean = false):void
+			{
+				var tmpFocusedData:StreamEntry = StreamItemRenderer.focusedData;
+				StreamItemRenderer.focusedData = null;
+				
+				Base.contentViewer.show(BlogEntry(super.data), this, forceOpen);
+				Base.contentViewer.focused = false;
+				
+				StreamItemRenderer.focusedData = tmpFocusedData;
+				var d:StreamEntry = StreamEntry(super.data);
+				callLater(function():void {selectedData=StreamEntry(d);});
+			}
+			
+			private function imgComplete(event:Event):void
+			{
+				var img:CachedImage = event.target as CachedImage;
+				if (!img) return;
+				if (Util.imgLoad(this, img)) {
+					img.removeEventListener(FlexEvent.READY, imgComplete);
+					img.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, imgError);
+					img.removeEventListener(IOErrorEvent.IO_ERROR, imgError);
+				}
+			}
+			
+			private function imgError(event:Event):void
+			{
+				var img:CachedImage = event.target as CachedImage;
+				if (!img) return;
+				if (Util.imgError(this, img)) {
+					img.removeEventListener(FlexEvent.READY, imgComplete);
+					img.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, imgError);
+					img.removeEventListener(IOErrorEvent.IO_ERROR, imgError);
+					if (imageContainer.numElements > 0)
+						imageContainer.removeAllElements();
+				}
+			}
+		]]>
+	</fx:Script>
+	
+	<s:VGroup top="5" bottom="5" left="68" right="10" gap="4">
+		
+		<s:Label id="title" width="100%" fontWeight="bold" color="0x333333" styleName="font15" maxHeight="{title.getStyle('lineHeight')*2-1}" />
+
+		<s:Group id="container" width="100%" bottom="0" clipAndEnableScrolling="true">
+			<s:Group id="imageContainer" height="0" width="0" clipAndEnableScrolling="true" />
+			<s:VGroup id="contentContainer" left="{imageContainer.width > 0 ? imageContainer.width+10 : 0}" right="0" clipAndEnableScrolling="true" gap="5">
+				<s:Label id="description" width="{contentContainer.width}" color="0x777777" styleName="font12" paddingBottom="2" paddingTop="2" maxHeight="{description.getStyle('lineHeight')*5-1}" />
+				<s:Group id="displayDescription" width="{contentContainer.width}" />
+			</s:VGroup>
+		</s:Group>
+
+		<!-- <s:Group width="260"> -->
+		<s:Group width="100%">
+			<s:RichText styleName="blogName" left="0" right="12" top="3">
+				<s:span id="blog" styleName="font12" fontWeight="bold" />
+				<s:span whiteSpaceCollapse="preserve"> </s:span>
+				<s:span id="blogURL" styleName="font11" color="0x999999" />
+			</s:RichText>
+		</s:Group>
+		
+		
+	</s:VGroup>
+</stream:StreamItemRenderer>

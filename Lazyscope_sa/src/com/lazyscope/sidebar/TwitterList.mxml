@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:List xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		xmlns:s="library://ns.adobe.com/flex/spark" 
+		xmlns:mx="library://ns.adobe.com/flex/mx"
+		dataProvider="{data}" width="100%" labelField="name" borderVisible="false"
+		itemRenderer="com.lazyscope.sidebar.TwitterListItemRenderer" addedToStage="onAddedToStage(event)" xmlns:stream="com.lazyscope.stream.*">
+	
+	<s:layout>
+		<s:VerticalLayout gap="0" />
+	</s:layout>
+	
+	<fx:Declarations>
+		<stream:StreamCollection id="data" uniqKey="name" />
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			
+			import mx.collections.Sort;
+			import mx.collections.SortField;
+			import mx.events.FlexEvent;
+			
+			public function setFilter():void
+			{
+				var item:Object = selectedItem;
+				if (!item) return;
+				Base.filterType = item.type;
+				Base.filterListData = item.data;
+			}
+			
+			protected function onAddedToStage(event:Event):void
+			{
+				var sort:Sort = new Sort;
+				sort.fields = new Array(new SortField('name'));
+				data.sort = sort;
+				data.refresh();
+				
+				scroller.setStyle('horizontalScrollPolicy', 'off');
+			}
+		]]>
+	</fx:Script>
+	
+</s:List>

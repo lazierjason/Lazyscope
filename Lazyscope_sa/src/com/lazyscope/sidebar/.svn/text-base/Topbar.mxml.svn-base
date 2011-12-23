@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+				   xmlns:s="library://ns.adobe.com/flex/spark" 
+				   xmlns:mx="library://ns.adobe.com/flex/mx"
+				   xmlns:control="com.lazyfeed.control.*"
+				   xmlns:toolbar="com.lazyfeed.toolbar.*"
+				   borderVisible="false" width="100%">
+	<s:backgroundFill>
+		<s:LinearGradient rotation="90">
+			<s:GradientEntry color="0x555555" />
+			<s:GradientEntry color="0x343434" />
+			<!--
+			<s:GradientEntry color="0x777777" />
+			<s:GradientEntry color="0xA0A0A0" />
+			<s:GradientEntry color="0xBBBBBB" />
+			-->
+		</s:LinearGradient>
+	</s:backgroundFill>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyfeed.Base;
+			import com.lazyfeed.UIFrame;
+			import com.lazyfeed.toolbar.SubscribeWindow;
+			import com.lazyfeed.twitter.TweetWindow;
+			
+			import spark.components.List;
+			
+			protected function onClickBtn(type:String):void
+			{
+				btnMentions.selected = type == 'notification';
+				btnMessages.selected = type == 'message';
+				btnFavorites.selected = type == 'favorite';
+				
+				switch (type) {
+					case 'notification':
+						if (Base.filterType == 8) return;
+						Base.filterType = 8;
+						break;
+					case 'message':
+						if (Base.filterType == 9) return;
+						Base.filterType = 9;
+						break;
+					case 'favorite':
+						if (Base.filterType == 10) return;
+						Base.filterType = 10;
+						break;
+					default:
+						return;
+						break;
+				}
+				
+				Base.stream.selectorChanged();
+				if (Base.sidebar.selected) {
+					if (Base.sidebar.selected is SidebarGroup) {
+						Base.sidebar.selected.selected = false;
+					}else if (Base.sidebar.selected is List) {
+						List(Base.sidebar.selected).selectedIndex = -1;
+					}
+					Base.sidebar.selected = null;
+				}
+			}
+			
+			public function showHome():void
+			{
+				if (Base.sidebar)
+					Base.sidebar.showHome();
+			}
+
+		]]>
+	</fx:Script>
+	
+	<s:HGroup left="5" top="1" gap="0">
+		<s:Group id="image" width="23" height="23" useHandCursor="true" buttonMode="true" mouseChildren="true" click="showHome()">
+			<s:filters>
+				<s:DropShadowFilter distance="1" blurX="2" angle="90" alpha="0.75" />
+			</s:filters>
+			<s:Group width="23" height="23">
+				<s:Image id="twitterProfile" width="19" height="19" left="2" top="2" />
+				<s:Rect width="22" height="22">
+					<s:stroke>
+						<s:SolidColorStroke id="profileFrame" color="0x92908E" weight="3" />
+					</s:stroke>
+				</s:Rect>
+				<s:mask>
+					<s:Graphic>
+						<s:Rect width="23" height="23" radiusX="2">
+							<s:fill>
+								<s:SolidColor color="0xFFFFFF" />
+							</s:fill>
+						</s:Rect>
+					</s:Graphic>
+				</s:mask>
+			</s:Group>
+		</s:Group>
+
+		<mx:Spacer width="18" />
+		<control:Btn id="btnPost" skinClass="com.lazyfeed.control.BtnSkin" width="26" height="24" iconPrefix="post" click="TweetWindow.post()" toolTip=" Post " />
+		
+		<mx:Spacer width="14" />
+		
+		<!--
+		<control:Btn id="btnSubscribe" skinClass="com.lazyfeed.control.BtnSkin" width="26" height="24" iconPrefix="addfeed" click="SubscribeWindow.show();" toolTip=" Add a subscription " />
+		<mx:Spacer width="10" />
+		-->
+		
+		<control:ToggleBtn id="btnMentions" skinClass="com.lazyfeed.control.ToggleBtnSkin" width="26" height="24" iconPrefix="mentions" click="onClickBtn('notification')" toolTip=" Notifications " />
+		<toolbar:Badge id="btnMentionsCnt" count="0" height="24" visible="false" click="onClickBtn('notification')" />
+		
+		<mx:Spacer width="5" />
+		
+		<control:ToggleBtn id="btnMessages" skinClass="com.lazyfeed.control.ToggleBtnSkin" width="26" height="24" iconPrefix="messages" click="onClickBtn('message')" toolTip=" Messages " />
+		<toolbar:Badge id="btnMessagesCnt" count="0" height="24" visible="false" click="onClickBtn('message')" />
+		
+		<mx:Spacer width="5" />
+
+		<control:ToggleBtn id="btnFavorites" skinClass="com.lazyfeed.control.ToggleBtnSkin" width="26" height="24" iconPrefix="favorites" click="onClickBtn('favorite')" toolTip=" Favorites " />
+		<toolbar:Badge id="btnFavoritesCnt" count="0" height="24" visible="false" click="onClickBtn('favorite')" />
+		
+	</s:HGroup>
+	<s:HGroup gap="0" right="5" top="1">
+		<control:ToggleBtn id="btnFrame3" skinClass="com.lazyfeed.control.ToggleBtnSkin" width="28" height="22" iconPrefix="frame3" click="UIFrame.showContentFrame()" selected="true" />
+		<control:ToggleBtn id="btnFrame1" skinClass="com.lazyfeed.control.ToggleBtnSkin" width="27" height="22" iconPrefix="frame1" click="UIFrame.hideContentFrame()" />
+	</s:HGroup>
+</s:BorderContainer>

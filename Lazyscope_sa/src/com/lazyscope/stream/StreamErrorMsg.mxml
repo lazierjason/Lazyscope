@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx" visible="false" clipAndEnableScrolling="true">
+	
+	<fx:Declarations>
+		<s:Power id="ease" exponent="4" />
+		<s:Resize id="show" target="{this}" duration="500" easer="{ease}" heightTo="23" effectStart="visible=true" />
+		<s:Resize id="hide" target="{this}" duration="100" easer="{ease}" heightTo="0" effectEnd="visible=false" />
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			import com.lazyscope.entry.StreamEntry;
+			
+			import mx.collections.ArrayList;
+			
+			public var updatedList:ArrayList = new ArrayList;
+			public var updatedCount:Object = {twitter:0, blog:0};
+			
+			public function showMsg():void
+			{
+				if (hide.isPlaying)
+					hide.stop();
+				if (show.isPlaying)
+					show.stop();
+				show.play();
+			}
+			
+			public function hideMsg():void
+			{
+				if (visible) {
+					if (show.isPlaying)
+						show.stop();
+					if (hide.isPlaying)
+						hide.stop();
+					hide.play();
+				}
+			}
+			
+			public function refresh():void
+			{
+				Base.stream.selectorChanged();
+			}
+		]]>
+	</fx:Script>
+
+	<s:BorderContainer top="0" bottom="0" left="0" right="0" borderVisible="false" backgroundColor="0xF1F78F" fontSize="12" fontWeight="bold" alpha="0.8">
+		<s:Label text="Twitter API is currently unstable. " left="5" top="6" color="0x777733" />
+		<s:Label text="Retry" right="5" top="6" click="refresh()" useHandCursor="true" textDecoration="underline" color="0x0279b4" />
+	</s:BorderContainer>
+</s:Group>

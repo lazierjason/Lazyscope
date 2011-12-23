@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+				   xmlns:s="library://ns.adobe.com/flex/spark" 
+				   xmlns:mx="library://ns.adobe.com/flex/mx"
+				   xmlns:lazyscope="com.lazyscope.*"
+				   xmlns:stream="com.lazyscope.stream.*"
+				   xmlns:control="com.lazyscope.control.*"
+				   width="240" visible="false">
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.lazyscope.Base;
+			import com.lazyscope.twitter.Twitter;
+			
+			public var adjustStreamSeletionMenuSize:Function;
+			
+			public function show():void
+			{
+				adjustStreamSeletionMenuSize();
+				visible = true;
+				Base.toolbar.profileFrame.color = 0xFFFDF0;
+			}
+			
+			public function hide():void
+			{
+				visible = false;
+				Base.toolbar.profileFrame.color = 0x92908E;
+			}
+			
+			public function onClickSignOut(e:Event=null):void
+			{
+				if (Base.ready) {
+					Base.twitter.disconnect();
+					callLater(Base.twitter.authorize);
+				}else{
+					Base.twitter.authorize();
+				}
+				hide();
+			}
+		]]>
+	</fx:Script>
+	
+	<stream:StreamSelector id="selector" top="0" bottom="30" left="0" width="100%" />
+	<s:BorderContainer height="30" left="0" right="0" bottom="0" borderVisible="false" backgroundColor="0x333333">
+		<s:HGroup gap="6" top="3" left="3">
+			<!-- <control:Btn id="btnSubscribe" skinClass="com.lazyscope.control.BtnSkin" width="26" height="24" iconPrefix="addfeed" click="SubscribeWindow.show();" toolTip=" Add a subscription " /> -->
+			<control:Btn id="btnSetting" skinClass="com.lazyscope.control.BtnSkin" width="26" height="24" iconPrefix="settings" click="PreferenceWindow.show();" toolTip=" Preferences " />
+			<!--
+			<control:Btn id="btnImportOPML" skinClass="com.lazyscope.control.BtnSkin" width="26" height="24" iconPrefix="addfeed" click="Base.showOPMLImport();" />
+			-->
+		</s:HGroup>
+		<s:Label id="toSignOut" text="Sign Out" color="0xFFFFFA" alpha="0.7" useHandCursor="true" buttonMode="true" top="10" right="5" click="onClickSignOut()" rollOver="toSignOut.alpha=1.0" rollOut="toSignOut.alpha=0.7" />
+	</s:BorderContainer>
+</s:BorderContainer>
