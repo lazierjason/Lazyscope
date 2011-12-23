@@ -23,7 +23,7 @@ You need to have your API keys.
 
 
 `
-* We are providing a compiled air file (Lazyscope_sa.air) including our API keys. *
+* We are providing a compiled air file (Lazyscope_sa.air) that uses our API keys. *
 `
 
 
