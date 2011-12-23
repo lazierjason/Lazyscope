@@ -19,7 +19,13 @@ You need to have your API keys.
 
 + d.key in Lazyscope_sa/src/com/lazyscope/content/Twitpic.as
 
-`We providing a compiled air file (Lazyscope_sa.air) including our API keys.`
+
+
+`
+
+We are providing a compiled air file (Lazyscope_sa.air) including our API keys.
+
+`
 
 
 ## Authors
